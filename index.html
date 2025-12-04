@@ -117,7 +117,6 @@
     <script type="module">
         import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
         import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/loaders/GLTFLoader.js';
-        import { GUI } from 'https://cdn.skypack.dev/dat.gui';
 
         // ==========================================
         // Einstellungen
@@ -127,11 +126,10 @@
 
         const CAR_SCALE = 8.0;
         const CAR_LIFT = 1.2;
-        const CAR_ROT_Y = 0;           // rad
+        const CAR_ROT_Y = 0;   // rad
 
         const CAR_COLOR = 0x111111;
-        const TRACK_WIDTH = 20;          // Basis-Breite von Straßen
-
+        const TRACK_WIDTH = 20;
         const SKY_COLOR = 0x8fd3ff;
 
         // Physik
@@ -151,16 +149,14 @@
         let scene, camera, miniCamera, renderer;
         let playerGroup, carModel, loadedCarMesh;
         let tires = [], particles = [];
-        let obstacles = [];   // Kollisionen (Gebäude, Pfeiler etc.)
+        let obstacles = [];
 
-        const params = {
-            scale: CAR_SCALE,
-            lift: CAR_LIFT,
-            rotationY: CAR_ROT_Y * (180 / Math.PI),
-        };
+        // HUD
+        const speedLabel = document.getElementById('speed-text');
+        let lastTime = performance.now();
 
         init();
-        animate();
+        requestAnimationFrame(animate);
 
         // ==========================================
         // Init
@@ -206,18 +202,14 @@
             createParkAreas();
             createBridgeArea();
             createParkingGarage();
-
             createCar();
-            initGUI();
 
             window.addEventListener('keydown', onKeyDown);
             window.addEventListener('keyup', onKeyUp);
             window.addEventListener('resize', onResize);
         }
 
-        // ==========================================
-        // Environment
-        // ==========================================
+        // === Umgebung ===
 
         function createGround() {
             const baseGeo = new THREE.PlaneGeometry(4000, 4000);
@@ -233,31 +225,28 @@
             const roadMat = new THREE.MeshStandardMaterial({ color: 0x33363f, roughness: 0.9 });
             const lineMat = new THREE.MeshBasicMaterial({ color: 0xf7f7f7 });
 
-            function addRoad(x, z, w, h, rot = 0) {
+            function addRoad(x, z, w, h) {
                 const road = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, h), roadMat);
                 road.position.set(x, 0, z);
-                road.rotation.y = rot;
                 road.receiveShadow = true;
                 scene.add(road);
-                return road;
             }
 
             // Hauptachsen
-            addRoad(0, 0, 800, TRACK_WIDTH);       // lange Ost-West
+            addRoad(0, 0, 800, TRACK_WIDTH);
             addRoad(0, -200, 800, TRACK_WIDTH);
             addRoad(0, 200, 800, TRACK_WIDTH);
 
-            addRoad(-200, 0, TRACK_WIDTH, 800);    // Nord-Süd
+            addRoad(-200, 0, TRACK_WIDTH, 800);
             addRoad(200, 0, TRACK_WIDTH, 800);
             addRoad(0, 0, TRACK_WIDTH, 800);
 
-            // kleine Nebenstraßen
+            // Nebenstraßen
             addRoad(-450, 0, 300, TRACK_WIDTH * 0.8);
             addRoad(450, 0, 300, TRACK_WIDTH * 0.8);
             addRoad(0, -450, TRACK_WIDTH * 0.8, 300);
             addRoad(0, 450, TRACK_WIDTH * 0.8, 300);
 
-            // Mittelstreifen (Deko)
             const lineGeo = new THREE.BoxGeometry(4, 0.11, 40);
             for (let x = -380; x <= 380; x += 60) {
                 const line = new THREE.Mesh(lineGeo, lineMat);
@@ -293,10 +282,8 @@
                 obstacles.push({ pos: new THREE.Vector3(x, 0, z), radius: radius });
             }
 
-            // Gebäude-Blöcke entlang der Straßen
             for (let i = -3; i <= 3; i++) {
                 if (i === 0) continue;
-
                 const x = i * 120;
                 addBuilding(x, -280, 50, 70, 60 + Math.random() * 60);
                 addBuilding(x, 280, 50, 70, 50 + Math.random() * 70);
@@ -309,7 +296,6 @@
                 addBuilding(280, z, 70, 50, 60 + Math.random() * 60);
             }
 
-            // ein paar höhere „Towers“
             addBuilding(-350, -350, 70, 70, 140);
             addBuilding(360, 330, 60, 60, 130);
         }
@@ -327,7 +313,6 @@
             path.position.set(-350, 0.04, 200);
             scene.add(path);
 
-            // simple Bäume im Park
             const trunkGeo = new THREE.CylinderGeometry(1.2, 1.5, 6, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b3b1f });
             const leafGeo = new THREE.SphereGeometry(4.5, 8, 8);
@@ -341,8 +326,7 @@
                 const crown = new THREE.Mesh(leafGeo, leafMat);
                 crown.position.y = 8;
                 crown.castShadow = true;
-                tree.add(trunk);
-                tree.add(crown);
+                tree.add(trunk, crown);
 
                 const rx = -420 + Math.random() * 140;
                 const rz = 120 + Math.random() * 160;
@@ -359,24 +343,20 @@
             const deckMat = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.6 });
             const sideMat = new THREE.MeshStandardMaterial({ color: 0x22252e, roughness: 0.8 });
 
-            // Brückendeck (oben)
             const deck = new THREE.Mesh(new THREE.BoxGeometry(180, 2, 14), deckMat);
             deck.position.set(0, 12, -260);
             deck.castShadow = true;
             deck.receiveShadow = true;
             bridgeGroup.add(deck);
 
-            // Geländer
             const railGeo = new THREE.BoxGeometry(180, 1.2, 0.5);
             const railL = new THREE.Mesh(railGeo, sideMat);
             railL.position.set(0, 13.5, -267);
-            const railR = new THREE.Mesh(railGeo, sideMat);
-            railR.position.set(0, 13.5, -253);
+            const railR = railL.clone();
+            railR.position.z = -253;
             railL.castShadow = railR.castShadow = true;
-            bridgeGroup.add(railL);
-            bridgeGroup.add(railR);
+            bridgeGroup.add(railL, railR);
 
-            // Pfeiler
             const pillarGeo = new THREE.BoxGeometry(4, 12, 4);
             const pillarMat = new THREE.MeshStandardMaterial({ color: 0x4b4f59, roughness: 0.9 });
             const px = [-70, 70];
@@ -388,12 +368,10 @@
                     p.castShadow = true;
                     p.receiveShadow = true;
                     bridgeGroup.add(p);
-
                     obstacles.push({ pos: new THREE.Vector3(x, 0, z), radius: 5 });
                 });
             });
 
-            // untere Straße unter der Brücke
             const underMat = new THREE.MeshStandardMaterial({ color: 0x2f323a, roughness: 0.9 });
             const underRoad = new THREE.Mesh(new THREE.BoxGeometry(200, 0.1, TRACK_WIDTH), underMat);
             underRoad.position.set(0, 0.02, -260);
@@ -427,14 +405,12 @@
                 wallLeft.position.set(-w / 2, y + 1.6, 0);
                 const wallRight = wallLeft.clone();
                 wallRight.position.x = w / 2;
-
                 [wallFront, wallBack, wallLeft, wallRight].forEach(wall => {
                     wall.castShadow = true;
                     group.add(wall);
                 });
             }
 
-            // optische Rampe (nicht fahrbar, nur Deko)
             const ramp = new THREE.Mesh(
                 new THREE.BoxGeometry(20, 0.6, 40),
                 floorMat
@@ -450,16 +426,13 @@
             obstacles.push({ pos: new THREE.Vector3(320, 0, 220), radius: 70 });
         }
 
-        // ==========================================
-        // Auto
-        // ==========================================
+        // === Auto ===
 
         function createCar() {
             playerGroup = new THREE.Group();
             carModel = new THREE.Group();
-
             playerGroup.position.set(0, 0.5, 40);
-            playerGroup.rotation.y = Math.PI;  // Blickrichtung nach „vorne“ auf Hauptstraße
+            playerGroup.rotation.y = Math.PI;
             playerGroup.add(carModel);
             scene.add(playerGroup);
 
@@ -480,7 +453,7 @@
                         roughness: 0.2
                     });
 
-                    loadedCarMesh.traverse((child) => {
+                    loadedCarMesh.traverse(child => {
                         if (child.isMesh) {
                             child.material = paint;
                             child.castShadow = true;
@@ -490,64 +463,28 @@
 
                     carModel.add(loadedCarMesh);
 
-                    // Reifen-Dummies für Rauch
                     const t1 = new THREE.Object3D();
                     t1.position.set(-1.5, 0, 1.5);
                     const t2 = new THREE.Object3D();
                     t2.position.set(1.5, 0, 1.5);
-                    carModel.add(t1);
-                    carModel.add(t2);
+                    carModel.add(t1, t2);
                     tires.push(t1, t2);
                 },
                 undefined,
                 (err) => {
                     console.error('Fehler beim Laden des Modells:', err);
                     document.getElementById('loading').innerText = 'Fehler beim Laden des Autos';
-                    buildFallbackCar();
                 }
             );
         }
 
-        function buildFallbackCar() {
-            const redMat = new THREE.MeshStandardMaterial({ color: 0xe60000 });
-            const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 6), redMat);
-            body.position.y = 0.8;
-            body.castShadow = true;
-            carModel.add(body);
-
-            const t1 = new THREE.Object3D(); t1.position.set(-1.5, 0, 1.5); carModel.add(t1);
-            const t2 = new THREE.Object3D(); t2.position.set(1.5, 0, 1.5); carModel.add(t2);
-            tires.push(t1, t2);
-
-            document.getElementById('loading').style.display = 'none';
-        }
-
-        function initGUI() {
-            const gui = new GUI();
-            const folder = gui.addFolder('Auto-Anpassung');
-            folder.add(params, 'scale', 0.1, 15).step(0.1).name('Größe').onChange(updateCarTransform);
-            folder.add(params, 'lift', -2, 5).step(0.1).name('Höhe Y').onChange(updateCarTransform);
-            folder.add(params, 'rotationY', 0, 360).name('Drehung').onChange(updateCarTransform);
-            folder.open();
-        }
-
-        function updateCarTransform() {
-            if (!loadedCarMesh) return;
-            loadedCarMesh.scale.set(params.scale, params.scale, params.scale);
-            loadedCarMesh.position.y = params.lift;
-            loadedCarMesh.rotation.y = params.rotationY * (Math.PI / 180);
-        }
-
-        // ==========================================
-        // Input
-        // ==========================================
+        // === Input ===
 
         function onKeyDown(e) {
             const k = e.key.toLowerCase();
             if (k in keys) keys[k] = true;
             if (e.code === 'Space') keys.space = true;
             if (k === 'r') {
-                // Reset Position
                 playerGroup.position.set(0, 0.5, 40);
                 playerGroup.rotation.set(0, Math.PI, 0);
                 speed = 0;
@@ -566,13 +503,10 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // ==========================================
-        // Effekte
-        // ==========================================
+        // === Effekte ===
 
         function spawnSmoke(pos) {
             if (Math.random() > 0.4) return;
-
             const p = new THREE.Mesh(
                 new THREE.BoxGeometry(0.35, 0.35, 0.35),
                 new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.45 })
@@ -581,7 +515,6 @@
             p.position.y = 0.25;
             p.rotation.set(Math.random(), Math.random(), Math.random());
             scene.add(p);
-
             particles.push({ mesh: p, life: 1.0 });
         }
 
@@ -599,12 +532,7 @@
             }
         }
 
-        // ==========================================
-        // Haupt-Loop
-        // ==========================================
-
-        const speedLabel = document.getElementById('speed-text');
-        let lastTime = performance.now();
+        // === Main Loop ===
 
         function animate(now) {
             requestAnimationFrame(animate);
@@ -616,21 +544,16 @@
             updateMiniMapCamera();
             updateParticles();
 
-            // Speed HUD
             const displaySpeed = Math.min(Math.floor(Math.abs(speed) * 140), 320);
             speedLabel.textContent = displaySpeed.toString();
 
-            // Render main view
             renderer.clear();
             renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
             renderer.setScissorTest(false);
             renderer.render(scene, camera);
 
-            // Render minimap
             const size = 220;
             const x = window.innerWidth - size - 20;
-            const y = 20;
-
             renderer.setViewport(x, window.innerHeight - size - 20, size, size);
             renderer.setScissor(x, window.innerHeight - size - 20, size, size);
             renderer.setScissorTest(true);
@@ -638,12 +561,9 @@
             renderer.setScissorTest(false);
         }
 
-        // ==========================================
-        // Physik
-        // ==========================================
+        // === Physik ===
 
         function updatePhysics(delta) {
-            // Beschleunigung / Bremsen
             if (keys.w) {
                 const speedFactor = 1 - (speed / maxSpeed);
                 const currentAccel = baseAcceleration * (speedFactor > 0.15 ? speedFactor : 0.15);
@@ -657,7 +577,6 @@
             if (speed > maxSpeed) speed = maxSpeed;
             if (speed < -reverseSpeed) speed = -reverseSpeed;
 
-            // Lenken
             if (Math.abs(speed) > 0.05) {
                 const dir = speed > 0 ? 1 : -1;
                 let dynamicTurn = turnSpeed * (1 - (speed / maxSpeed) * 0.3);
@@ -665,10 +584,8 @@
                 if (keys.d) playerGroup.rotation.y -= dynamicTurn * dir;
             }
 
-            // Bewegung
             playerGroup.translateZ(-speed);
 
-            // einfache Kollisionen gegen Gebäude/Park etc.
             for (const o of obstacles) {
                 const dist = new THREE.Vector2(
                     playerGroup.position.x - o.pos.x,
@@ -676,7 +593,6 @@
                 ).length();
 
                 if (dist < o.radius) {
-                    // zurückschieben + Speed dämpfen
                     const push = new THREE.Vector3(
                         playerGroup.position.x - o.pos.x,
                         0,
@@ -687,7 +603,6 @@
                 }
             }
 
-            // Drift
             targetDriftAngle = 0;
             if (keys.space && Math.abs(speed) > 0.6) {
                 if (keys.a) targetDriftAngle = 0.55;
@@ -707,7 +622,6 @@
         }
 
         function updateCamera() {
-            // Chase-Cam
             const relativeCamOffset = new THREE.Vector3(0, 3.2, 8.5);
             const cameraOffset = relativeCamOffset.applyMatrix4(playerGroup.matrixWorld);
             camera.position.lerp(cameraOffset, 0.12);
@@ -721,7 +635,7 @@
             const target = playerGroup.position.clone();
             miniCamera.position.set(target.x, 120, target.z);
             miniCamera.lookAt(target);
-            miniCamera.rotation.z = 0; // Minimap-Nord nach oben
+            miniCamera.rotation.z = 0;
         }
     </script>
 </body>
