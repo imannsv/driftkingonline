@@ -43,16 +43,14 @@
         Space = Handbremse (Drift)
     </div>
 
-    <!-- Three.js (klassisch, kein Modul) -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-    <!-- GLTFLoader für globale THREE-Nutzung -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+    <script type="module">
+        // *** EINZIGER Script-Block, keine anderen <script>-Tags im Dokument ***
+        import * as THREE from "https://cdn.skypack.dev/three@0.152.2";
+        import { GLTFLoader } from "https://cdn.skypack.dev/three@0.152.2/examples/jsm/loaders/GLTFLoader.js";
 
-    <script>
         // ===== Szene / Kamera / Renderer =====
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x9ad9ff);
-        scene.fog = new THREE.Fog(0x9ad9ff, 80, 260);
 
         const camera = new THREE.PerspectiveCamera(
             70,
@@ -76,7 +74,7 @@
         sun.shadow.mapSize.set(1024, 1024);
         scene.add(sun);
 
-        // ===== Boden (einfach, damit wir erstmal was sehen) =====
+        // ===== Boden (Test) =====
         const ground = new THREE.Mesh(
             new THREE.PlaneGeometry(400, 400),
             new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 1 })
@@ -85,42 +83,36 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // ===== CLS 63 laden =====
+        // ===== CLS-Modell laden =====
         let car = null;
         let carReady = false;
 
-        const loader = new THREE.GLTFLoader(); // kommt aus dem zweiten Script-Tag
+        const loader = new GLTFLoader(); // <-- NICHT THREE.GLTFLoader!
         loader.load(
-            "mersedes_cls63.glb",       // Datei muss neben index.html liegen
-            function (gltf) {
+            "mersedes_cls63.glb", // muss neben index.html liegen
+            (gltf) => {
                 car = gltf.scene;
-
-                car.traverse(function (obj) {
-                    if (obj.isMesh) {
-                        obj.castShadow = true;
-                        obj.receiveShadow = true;
+                car.traverse((o) => {
+                    if (o.isMesh) {
+                        o.castShadow = true;
+                        o.receiveShadow = true;
                     }
                 });
-
-                // ggf. anpassen (Scale/Rotation hängt vom Modell ab)
                 car.position.set(0, 0, 0);
                 car.scale.set(1, 1, 1);
-                car.rotation.y = Math.PI; // zur Not später drehen
-
+                car.rotation.y = Math.PI;    // ggf. anpassen
                 scene.add(car);
                 carReady = true;
                 console.log("CLS geladen");
             },
             undefined,
-            function (error) {
-                console.error("Fehler beim Laden des Modells:", error);
-            }
+            (err) => console.error("GLB Fehler:", err)
         );
 
-        // ===== Simple Steuerung (erstmal ohne Drift, nur Test) =====
+        // ===== Simple Steuerung (nur zum Test) =====
         const keys = {};
-        document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-        document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+        document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+        document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
 
         let vel = 0;
         let angle = 0;
@@ -130,8 +122,7 @@
 
             if (keys["w"] || keys["arrowup"]) vel -= 0.05;
             if (keys["s"] || keys["arrowdown"]) vel += 0.05;
-
-            vel *= 0.95; // Reibung
+            vel *= 0.95;
 
             if (keys["a"] || keys["arrowleft"]) angle += 0.05;
             if (keys["d"] || keys["arrowright"]) angle -= 0.05;
@@ -170,13 +161,11 @@
 
             updateCar(delta);
             updateCamera();
-
             renderer.render(scene, camera);
         }
         animate(last);
 
-        // ===== Resize =====
-        window.addEventListener("resize", function () {
+        window.addEventListener("resize", () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
