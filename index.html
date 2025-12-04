@@ -53,7 +53,8 @@
                 0.1,
                 1000
             );
-            camera.position.set(0, 5, -10);
+            camera.position.set(0, 5, 10); // Kamera VOR dem Auto
+
 
             const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -165,8 +166,13 @@
             function animate() {
                 requestAnimationFrame(animate);
                 update();
+
+                // Kamera schaut immer auf das Auto
+                camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
+
                 renderer.render(scene, camera);
             }
+
 
             animate();
 
