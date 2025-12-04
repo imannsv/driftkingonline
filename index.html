@@ -111,18 +111,19 @@
         // geschlossener Kurs mit Kurven & leichten Geraden
         const TRACK_HALF_WIDTH = 70; // halbe Breite der Strecke
 
+        // Großer rechteckiger Kurs (leicht abgerundete Ecken)
         const trackPoints = [
-            { x: 0, y: -550 },   // Start oben
-            { x: 380, y: -420 },
-            { x: 620, y: -100 },
-            { x: 550, y: 260 },
-            { x: 250, y: 520 },
-            { x: -80, y: 520 },
-            { x: -420, y: 330 },
-            { x: -600, y: 40 },
-            { x: -520, y: -320 },
-            { x: -220, y: -520 }
+            { x: 0, y: -400 },   // Start oben Mitte
+            { x: 550, y: -400 },
+            { x: 650, y: -300 },
+            { x: 650, y: 300 },
+            { x: 550, y: 400 },
+            { x: -550, y: 400 },
+            { x: -650, y: 300 },
+            { x: -650, y: -300 },
+            { x: -550, y: -400 }
         ];
+
         const WORLD_MARGIN = 300;
 
         function segmentDistance(p, a, b) {
@@ -511,7 +512,7 @@
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
-                // Scheinwerfer (vorne = oben)
+                // Scheinwerfer
                 ctx.fillStyle = "#ffe9b0";
                 ctx.fillRect(-car.width * 0.4, -car.length * 0.5 - 1, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, -car.length * 0.5 - 1, car.width * 0.3, 4);
@@ -527,6 +528,15 @@
                 drawWheel(car.width / 2 - 6, -car.length / 2 + 18, 8, 4);
                 drawWheel(-car.width / 2 + 6, car.length / 2 - 18, 8, 4);
                 drawWheel(car.width / 2 - 6, car.length / 2 - 18, 8, 4);
+
+                // Lichtkegel (neu)
+                ctx.save();
+                ctx.globalAlpha = 0.35;
+                function headlightCone(offsetX) { /* wie oben */ }
+                headlightCone(-car.width * 0.25);
+                headlightCone(car.width * 0.25);
+
+                ctx.restore();
 
                 ctx.restore();
             }
