@@ -43,17 +43,22 @@
         Space = Handbremse (Drift)
     </div>
 
-    <script type="module">
-        import * as THREE from "https://cdn.skypack.dev/three@0.152.2";
-        import { GLTFLoader } from "https://cdn.skypack.dev/three@0.152.2/examples/jsm/loaders/GLTFLoader.js";
+    <!-- Three.js (klassisch, kein Modul) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+    <!-- GLTFLoader für globale THREE-Nutzung -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
-        // --- Scene ---
+    <script>
+        // ===== Szene / Kamera / Renderer =====
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x9ad9ff);
         scene.fog = new THREE.Fog(0x9ad9ff, 80, 260);
 
         const camera = new THREE.PerspectiveCamera(
-            70, window.innerWidth / window.innerHeight, 0.1, 1000
+            70,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
         );
         camera.position.set(0, 5, -12);
 
@@ -71,86 +76,92 @@
         sun.shadow.mapSize.set(1024, 1024);
         scene.add(sun);
 
-        // --- Ground & simple map (erstmal minimal, damit wir sehen ob es läuft) ---
+        // ===== Boden (einfach, damit wir erstmal was sehen) =====
         const ground = new THREE.Mesh(
             new THREE.PlaneGeometry(400, 400),
-            new THREE.MeshStandardMaterial({ color: 0x444444 })
+            new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 1 })
         );
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // --- CLS laden ---
+        // ===== CLS 63 laden =====
         let car = null;
         let carReady = false;
 
-        const loader = new GLTFLoader();
+        const loader = new THREE.GLTFLoader(); // kommt aus dem zweiten Script-Tag
         loader.load(
-            "mersedes_cls63.glb",
-            (gltf) => {
+            "mersedes_cls63.glb",       // Datei muss neben index.html liegen
+            function (gltf) {
                 car = gltf.scene;
-                car.traverse(o => {
-                    if (o.isMesh) {
-                        o.castShadow = true;
-                        o.receiveShadow = true;
+
+                car.traverse(function (obj) {
+                    if (obj.isMesh) {
+                        obj.castShadow = true;
+                        obj.receiveShadow = true;
                     }
                 });
+
+                // ggf. anpassen (Scale/Rotation hängt vom Modell ab)
                 car.position.set(0, 0, 0);
                 car.scale.set(1, 1, 1);
-                car.rotation.y = Math.PI;
+                car.rotation.y = Math.PI; // zur Not später drehen
+
                 scene.add(car);
                 carReady = true;
                 console.log("CLS geladen");
             },
             undefined,
-            (err) => console.error("Fehler beim Laden:", err)
+            function (error) {
+                console.error("Fehler beim Laden des Modells:", error);
+            }
         );
 
-        // --- Steuerung (einfach, kein Drift, nur zum Test) ---
+        // ===== Simple Steuerung (erstmal ohne Drift, nur Test) =====
         const keys = {};
         document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
         document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-        let velZ = 0;
+        let vel = 0;
         let angle = 0;
 
         function updateCar(delta) {
             if (!carReady) return;
 
-            if (keys["w"]) velZ -= 0.05;
-            if (keys["s"]) velZ += 0.05;
-            velZ *= 0.95;
+            if (keys["w"] || keys["arrowup"]) vel -= 0.05;
+            if (keys["s"] || keys["arrowdown"]) vel += 0.05;
 
-            if (keys["a"]) angle += 0.05;
-            if (keys["d"]) angle -= 0.05;
+            vel *= 0.95; // Reibung
+
+            if (keys["a"] || keys["arrowleft"]) angle += 0.05;
+            if (keys["d"] || keys["arrowright"]) angle -= 0.05;
 
             car.rotation.y = angle + Math.PI;
 
-            const dx = Math.sin(angle) * velZ;
-            const dz = Math.cos(angle) * velZ;
+            const dx = Math.sin(angle) * vel;
+            const dz = Math.cos(angle) * vel;
             car.position.x += dx;
             car.position.z += dz;
         }
 
-        // --- Chase Cam ---
+        // ===== Chase-Cam =====
         function updateCamera() {
             if (!carReady) return;
 
             const offset = new THREE.Vector3(0, 4, 10);
             const rotated = offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
 
-            camera.position.lerp(
-                new THREE.Vector3(
-                    car.position.x + rotated.x,
-                    car.position.y + rotated.y,
-                    car.position.z + rotated.z
-                ), 0.08
+            const targetPos = new THREE.Vector3(
+                car.position.x + rotated.x,
+                car.position.y + rotated.y,
+                car.position.z + rotated.z
             );
 
+            camera.position.lerp(targetPos, 0.08);
             camera.lookAt(car.position.x, car.position.y + 1.5, car.position.z);
         }
 
-        // --- Loop ---
+        // ===== Render-Loop =====
         let last = performance.now();
         function animate(now) {
             requestAnimationFrame(animate);
@@ -159,11 +170,13 @@
 
             updateCar(delta);
             updateCamera();
+
             renderer.render(scene, camera);
         }
         animate(last);
 
-        window.addEventListener("resize", () => {
+        // ===== Resize =====
+        window.addEventListener("resize", function () {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
