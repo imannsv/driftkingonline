@@ -150,14 +150,14 @@
         import { GUI } from 'https://cdn.skypack.dev/dat.gui';
 
         // ==========================================
-        // === DEINE WERTE (auf GLB angepasst) ===
+        // === Einstellungen ===
         // ==========================================
 
-        const CAR_FILE = 'mersedes_cls63.glb';   // <-- deine GLB-Datei
+        const CAR_FILE = 'mersedes_cls63.glb';   // GLB muss neben index.html liegen
 
-        const CAR_SCALE = 2.0;    // Größe
-        const CAR_LIFT = 1.1;    // Höhe
-        const CAR_ROTATION = 0;   // zusätzliche Drehung in RAD (optional)
+        const CAR_SCALE = 8.0;      // größer
+        const CAR_LIFT = 1.2;      // leicht angehoben
+        const CAR_ROTATION = 0;     // zusätzliche Rotation (rad)
 
         const CAR_COLOR = 0x111111;
         const MAX_LAPS = 3;
@@ -178,7 +178,6 @@
         let reverseSpeed = 0.6;
         let turnSpeed = 0.04;
 
-        // Neue Variablen für smoothen Drift
         let currentDriftAngle = 0;
         let targetDriftAngle = 0;
         let driftSmoothness = 0.08;
@@ -189,7 +188,7 @@
         const params = {
             scale: CAR_SCALE,
             lift: CAR_LIFT,
-            rotationY: CAR_ROTATION * (180 / Math.PI), // Grad für GUI
+            rotationY: CAR_ROTATION * (180 / Math.PI),
         };
 
         // Rennen
@@ -257,7 +256,7 @@
         function initGUI() {
             const gui = new GUI();
             const folder = gui.addFolder('Auto Anpassung');
-            folder.add(params, 'scale', 0.1, 5.0).step(0.1).name('Größe').onChange(updateCarTransform);
+            folder.add(params, 'scale', 0.1, 15.0).step(0.1).name('Größe').onChange(updateCarTransform);
             folder.add(params, 'lift', -2, 5).step(0.1).name('Höhe Y').onChange(updateCarTransform);
             folder.add(params, 'rotationY', 0, 360).name('Drehung').onChange(updateCarTransform);
             folder.open();
@@ -271,63 +270,135 @@
             }
         }
 
+        // ===== Boden & Umgebung =====
         function createGround() {
-            const geo = new THREE.PlaneGeometry(4000, 4000);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x225522, roughness: 1 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.position.y = -0.05;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+            // Äußere Fläche – dunkleres Grün
+            const baseGeo = new THREE.PlaneGeometry(4000, 4000);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1c5e2b, roughness: 1 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.rotation.x = -Math.PI / 2;
+            base.position.y = -0.1;
+            base.receiveShadow = true;
+            scene.add(base);
+
+            // Infield – helleres Grün
+            const innerGeo = new THREE.PlaneGeometry(1200, 1200);
+            const innerMat = new THREE.MeshStandardMaterial({ color: 0x3bb54a, roughness: 0.9 });
+            const inner = new THREE.Mesh(innerGeo, innerMat);
+            inner.rotation.x = -Math.PI / 2;
+            inner.position.y = -0.05;
+            inner.receiveShadow = true;
+            scene.add(inner);
         }
 
         function createTrack() {
             trackCurve = new THREE.CatmullRomCurve3([
-                new THREE.Vector3(0, 0, 200), new THREE.Vector3(0, 0, -400),
-                new THREE.Vector3(-150, 0, -600), new THREE.Vector3(-400, 0, -500),
-                new THREE.Vector3(-500, 0, -200), new THREE.Vector3(-450, 0, 100),
-                new THREE.Vector3(-200, 0, 300), new THREE.Vector3(0, 0, 200)
+                new THREE.Vector3(0, 0, 200),
+                new THREE.Vector3(0, 0, -400),
+                new THREE.Vector3(-150, 0, -600),
+                new THREE.Vector3(-400, 0, -500),
+                new THREE.Vector3(-500, 0, -200),
+                new THREE.Vector3(-450, 0, 100),
+                new THREE.Vector3(-200, 0, 300),
+                new THREE.Vector3(0, 0, 200)
             ], true);
+
             trackPoints = trackCurve.getSpacedPoints(800);
 
-            const canvas = document.createElement('canvas');
-            canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#333'; ctx.fillRect(0, 0, 128, 128);
-            ctx.fillStyle = '#eee';
-            ctx.fillRect(5, 0, 3, 128);
-            ctx.fillRect(120, 0, 3, 128);
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(1, 80);
+            // Asphalt-Textur
+            const asphaltCanvas = document.createElement('canvas');
+            asphaltCanvas.width = 256;
+            asphaltCanvas.height = 256;
+            const aCtx = asphaltCanvas.getContext('2d');
+            aCtx.fillStyle = '#3a3d44';
+            aCtx.fillRect(0, 0, 256, 256);
+            aCtx.fillStyle = 'rgba(255,255,255,0.02)';
+            for (let i = 0; i < 400; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                const r = Math.random() * 2;
+                aCtx.beginPath();
+                aCtx.arc(x, y, r, 0, Math.PI * 2);
+                aCtx.fill();
+            }
+            const asphaltTex = new THREE.CanvasTexture(asphaltCanvas);
+            asphaltTex.wrapS = asphaltTex.wrapT = THREE.RepeatWrapping;
+            asphaltTex.repeat.set(1, 80);
 
-            const geo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH / 2, 8, true);
-            const mat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.7 });
-            const track = new THREE.Mesh(geo, mat);
+            // Straße
+            const roadGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH / 2, 12, true);
+            const roadMat = new THREE.MeshStandardMaterial({
+                map: asphaltTex,
+                side: THREE.DoubleSide,
+                roughness: 0.8,
+                metalness: 0.0
+            });
+            const track = new THREE.Mesh(roadGeo, roadMat);
             track.scale.y = 0.001;
             track.position.y = 0.05;
             track.receiveShadow = true;
             scene.add(track);
 
+            // Curbs (rot/weiß) innen/außen
+            const curbCanvas = document.createElement('canvas');
+            curbCanvas.width = 128;
+            curbCanvas.height = 32;
+            const cctx = curbCanvas.getContext('2d');
+            for (let i = 0; i < 8; i++) {
+                cctx.fillStyle = (i % 2 === 0) ? '#ff0000' : '#ffffff';
+                cctx.fillRect(i * 16, 0, 16, 32);
+            }
+            const curbTex = new THREE.CanvasTexture(curbCanvas);
+            curbTex.wrapS = curbTex.wrapT = THREE.RepeatWrapping;
+            curbTex.repeat.set(40, 1);
+
+            const curbInnerGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH / 2 + 1.0, 32, true);
+            const curbOuterGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH / 2 + 2.0, 32, true);
+
+            const curbMat = new THREE.MeshStandardMaterial({
+                map: curbTex,
+                side: THREE.DoubleSide,
+                roughness: 0.4,
+                metalness: 0.0
+            });
+
+            const curbInner = new THREE.Mesh(curbInnerGeo, curbMat);
+            curbInner.scale.y = 0.0006;
+            curbInner.position.y = 0.055;
+            scene.add(curbInner);
+
+            const curbOuter = new THREE.Mesh(curbOuterGeo, curbMat.clone());
+            curbOuter.scale.y = 0.0006;
+            curbOuter.position.y = 0.058;
+            scene.add(curbOuter);
+
+            // Start/Ziel
             const checkCanvas = document.createElement('canvas');
-            checkCanvas.width = 64; checkCanvas.height = 64;
-            const cCtx = checkCanvas.getContext('2d');
-            cCtx.fillStyle = '#fff'; cCtx.fillRect(0, 0, 64, 64);
-            cCtx.fillStyle = '#000';
-            for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if ((x + y) % 2) cCtx.fillRect(x * 16, y * 16, 16, 16);
+            checkCanvas.width = 64;
+            checkCanvas.height = 64;
+            const checkCtx = checkCanvas.getContext('2d');
+            checkCtx.fillStyle = '#fff';
+            checkCtx.fillRect(0, 0, 64, 64);
+            checkCtx.fillStyle = '#000';
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 4; x++) {
+                    if ((x + y) % 2) checkCtx.fillRect(x * 16, y * 16, 16, 16);
+                }
+            }
             const checkTex = new THREE.CanvasTexture(checkCanvas);
             checkTex.wrapS = checkTex.wrapT = THREE.RepeatWrapping;
             checkTex.repeat.set(TRACK_WIDTH / 16, 4);
 
             const startLine = new THREE.Mesh(
-                new THREE.PlaneGeometry(TRACK_WIDTH, 12),
-                new THREE.MeshStandardMaterial({ map: checkTex, roughness: 0.5 })
+                new THREE.PlaneGeometry(TRACK_WIDTH, 14),
+                new THREE.MeshStandardMaterial({ map: checkTex, roughness: 0.4 })
             );
             startLine.rotation.x = -Math.PI / 2;
-            startLine.position.y = 0.06;
-            startLine.position.z = 0;
+            startLine.position.y = 0.07;
+            startLine.position.copy(trackCurve.getPoint(0));
             scene.add(startLine);
 
+            checkpoints = [];
             for (let i = 0; i < 30; i++) checkpoints.push(trackCurve.getPoint(i / 30));
             nextCP = 1;
         }
@@ -422,7 +493,6 @@
                     loadedCarMesh = gltf.scene;
                     const object = loadedCarMesh;
 
-                    // deine Werte
                     object.scale.set(CAR_SCALE, CAR_SCALE, CAR_SCALE);
                     object.position.y = CAR_LIFT;
                     object.rotation.y = CAR_ROTATION;
@@ -442,7 +512,6 @@
 
                     carModel.add(object);
 
-                    // Dummy-Reifen für Rauch
                     let t1 = new THREE.Object3D(); t1.position.set(-1.5, 0, 1.5); carModel.add(t1); tires.push(t1);
                     let t2 = new THREE.Object3D(); t2.position.set(1.5, 0, 1.5); carModel.add(t2); tires.push(t2);
                 },
@@ -564,11 +633,12 @@
                 }
             }
 
-            // Kamera
-            const relativeCamOffset = new THREE.Vector3(0, 6, 18);
+            // Kamera (näher, tiefer)
+            const relativeCamOffset = new THREE.Vector3(0, 3.2, 8.5);
             const cameraOffset = relativeCamOffset.applyMatrix4(playerGroup.matrixWorld);
-            camera.position.lerp(cameraOffset, 0.1);
-            const lookAtTarget = new THREE.Vector3(0, 2, -15);
+            camera.position.lerp(cameraOffset, 0.12);
+
+            const lookAtTarget = new THREE.Vector3(0, 1.8, -6);
             lookAtTarget.applyMatrix4(playerGroup.matrixWorld);
             camera.lookAt(lookAtTarget);
 
