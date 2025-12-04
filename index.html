@@ -106,61 +106,24 @@
         });
 
         // =========================
-        // Track: Rundkurs (Polyline)
+        // Track: rechteckige Fläche
         // =========================
-        // geschlossener Kurs mit Kurven & leichten Geraden
-        const TRACK_HALF_WIDTH = 70; // halbe Breite der Strecke
-
-        // Großer rechteckiger Kurs (leicht abgerundete Ecken)
-        const trackPoints = [
-            { x: 0, y: -400 },   // Start oben Mitte
-            { x: 550, y: -400 },
-            { x: 650, y: -300 },
-            { x: 650, y: 300 },
-            { x: 550, y: 400 },
-            { x: -550, y: 400 },
-            { x: -650, y: 300 },
-            { x: -650, y: -300 },
-            { x: -550, y: -400 }
-        ];
-
+        const TRACK = {
+            cx: 0,
+            cy: 0,
+            halfWidth: 800,
+            halfHeight: 500
+        };
+        const TRACK_MARGIN = 40;  // „Rand“ innerhalb der Bahn
         const WORLD_MARGIN = 300;
 
-        function segmentDistance(p, a, b) {
-            const abx = b.x - a.x;
-            const aby = b.y - a.y;
-            const apx = p.x - a.x;
-            const apy = p.y - a.y;
-            const abLenSq = abx * abx + aby * aby;
-            let t = 0;
-            if (abLenSq > 0) {
-                t = (apx * abx + apy * aby) / abLenSq;
-                if (t < 0) t = 0;
-                if (t > 1) t = 1;
-            }
-            const cx = a.x + abx * t;
-            const cy = a.y + aby * t;
-            const dx = p.x - cx;
-            const dy = p.y - cy;
-            return Math.hypot(dx, dy);
-        }
-
-        function distanceToTrackCenter(px, py) {
-            const p = { x: px, y: py };
-            let minD = Infinity;
-            const n = trackPoints.length;
-            for (let i = 0; i < n; i++) {
-                const a = trackPoints[i];
-                const b = trackPoints[(i + 1) % n];
-                const d = segmentDistance(p, a, b);
-                if (d < minD) minD = d;
-            }
-            return minD;
-        }
-
         function isOnTrack(x, y) {
-            const d = distanceToTrackCenter(x, y);
-            return d <= TRACK_HALF_WIDTH * 0.85;
+            return (
+                x >= TRACK.cx - TRACK.halfWidth + TRACK_MARGIN &&
+                x <= TRACK.cx + TRACK.halfWidth - TRACK_MARGIN &&
+                y >= TRACK.cy - TRACK.halfHeight + TRACK_MARGIN &&
+                y <= TRACK.cy + TRACK.halfHeight - TRACK_MARGIN
+            );
         }
 
         // =========================
@@ -169,19 +132,18 @@
         const car = {
             x: 0,
             y: 0,
-            angle: 0,          // Richtung (wird für Physik + Zeichnen benutzt)
+            angle: 0,          // Richtung
             vx: 0,
             vy: 0,
-            width: 28,         // optische Breite
-            length: 60,        // optische Länge
-            maxSpeed: 220,        // doppelte Topspeed
-            acceleration: 290,    // viel stärkere Beschleunigung
-            brake: 180,           // stärkeres Bremsen
-            friction: 2.0,        // leicht weniger Bodenhaftung = schnelleres Ausrollen
-            grip: 7,              // etwas weniger Grip = leichter ins Driften
-            handbrakeGrip: 2.2,   // Handbremse hat mehr Wirkung
-            steering: 220         // direkteres Lenkgefühl bei hoher Geschwindigkeit
-
+            width: 28,
+            length: 60,
+            maxSpeed: 220,
+            acceleration: 290,
+            brake: 180,
+            friction: 2.0,
+            grip: 7,
+            handbrakeGrip: 2.2,
+            steering: 220
         };
 
         const respawn = {
@@ -192,11 +154,10 @@
         };
 
         function setCarToSpawn() {
-            const start = trackPoints[0];
-            const next = trackPoints[1];
-            car.x = start.x;
-            car.y = start.y;
-            car.angle = Math.atan2(next.y - start.y, next.x - start.x); // tangential zur Strecke
+            // Start unten mittig im Rechteck, Richtung nach oben
+            car.x = TRACK.cx;
+            car.y = TRACK.cy + TRACK.halfHeight - 120;
+            car.angle = -Math.PI / 2; // nach oben
             car.vx = 0;
             car.vy = 0;
         }
@@ -285,7 +246,7 @@
                 car.vy *= scale;
             }
 
-            // A/D vertauscht fixen: A = links, D = rechts
+            // A = links, D = rechts
             const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
             if (steerInput !== 0 && speed > 1) {
                 const speedFactor = Math.max(speed / car.maxSpeed, 0.3);
@@ -316,7 +277,7 @@
                 });
             }
 
-            const kmh = Math.round(speed * 2.6); // etwas „realistischer“
+            const kmh = Math.round(speed * 2.6);
             speedText.textContent = kmh.toString();
             driftText.textContent = Math.round(driftStrength * 100);
 
@@ -346,83 +307,76 @@
         }
 
         function drawTrack(camX, camY) {
-            // Asphalt
-            ctx.save();
-            ctx.strokeStyle = "#2b2f38";
-            ctx.lineWidth = TRACK_HALF_WIDTH * 2;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.beginPath();
-            for (let i = 0; i < trackPoints.length; i++) {
-                const p = worldToScreen(trackPoints[i].x, trackPoints[i].y, camX, camY);
-                if (i === 0) ctx.moveTo(p.x, p.y);
-                else ctx.lineTo(p.x, p.y);
-            }
-            ctx.closePath();
-            ctx.stroke();
-            ctx.restore();
+            const cx = TRACK.cx;
+            const cy = TRACK.cy;
+            const w = TRACK.halfWidth * 2;
+            const h = TRACK.halfHeight * 2;
 
-            // Rand (heller Streifen)
+            const screen = worldToScreen(cx, cy, camX, camY);
+
             ctx.save();
+            ctx.translate(screen.x, screen.y);
+
+            // Asphalt-Fläche
+            ctx.fillStyle = "#2b2f38";
+            roundedRect(ctx, -w / 2, -h / 2, w, h, 40);
+            ctx.fill();
+
+            // weiße Außenlinie
+            ctx.lineWidth = 14;
             ctx.strokeStyle = "#f5f5f5";
-            ctx.lineWidth = 8;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.beginPath();
-            for (let i = 0; i < trackPoints.length; i++) {
-                const p = worldToScreen(trackPoints[i].x, trackPoints[i].y, camX, camY);
-                if (i === 0) ctx.moveTo(p.x, p.y);
-                else ctx.lineTo(p.x, p.y);
-            }
-            ctx.closePath();
             ctx.stroke();
-            ctx.restore();
 
-            // Curbs rot/weiß – wir laufen über die Segmente und wechseln die Farbe
-            const n = trackPoints.length;
-            const curbWidth = TRACK_HALF_WIDTH * 2 + 4;
+            // Curbs innen (rot/weiß gestrichelt)
+            const innerMargin = 22;
+            const curbW = w - innerMargin * 2;
+            const curbH = h - innerMargin * 2;
 
-            for (let i = 0; i < n; i++) {
-                const a = trackPoints[i];
-                const b = trackPoints[(i + 1) % n];
-                const segments = 8;
-                for (let j = 0; j < segments; j++) {
-                    const t0 = j / segments;
-                    const t1 = (j + 1) / segments;
-                    const sx0 = a.x + (b.x - a.x) * t0;
-                    const sy0 = a.y + (b.y - a.y) * t0;
-                    const sx1 = a.x + (b.x - a.x) * t1;
-                    const sy1 = a.y + (b.y - a.y) * t1;
+            const segmentsPerSide = 18;
+            ctx.lineWidth = 10;
 
-                    const p0 = worldToScreen(sx0, sy0, camX, camY);
-                    const p1 = worldToScreen(sx1, sy1, camX, camY);
+            function drawCurbSide(x1, y1, x2, y2, invert) {
+                for (let i = 0; i < segmentsPerSide; i++) {
+                    const t0 = i / segmentsPerSide;
+                    const t1 = (i + 1) / segmentsPerSide;
+                    const sx0 = x1 + (x2 - x1) * t0;
+                    const sy0 = y1 + (y2 - y1) * t0;
+                    const sx1 = x1 + (x2 - x1) * t1;
+                    const sy1 = y1 + (y2 - y1) * t1;
 
-                    ctx.save();
-                    ctx.strokeStyle = ((i + j) % 2 === 0) ? "#ff5555" : "#f5f5f5";
-                    ctx.lineWidth = 12;
+                    ctx.strokeStyle = ((i + (invert ? 1 : 0)) % 2 === 0) ? "#ff5555" : "#f5f5f5";
                     ctx.beginPath();
-                    ctx.moveTo(p0.x, p0.y);
-                    ctx.lineTo(p1.x, p1.y);
+                    ctx.moveTo(sx0, sy0);
+                    ctx.lineTo(sx1, sy1);
                     ctx.stroke();
-                    ctx.restore();
                 }
             }
 
-            // Mittellinie (gestrichelt)
-            ctx.save();
+            // vier Seiten der inneren Curbs
+            drawCurbSide(-curbW / 2, -curbH / 2, curbW / 2, -curbH / 2, false); // oben
+            drawCurbSide(curbW / 2, -curbH / 2, curbW / 2, curbH / 2, true);  // rechts
+            drawCurbSide(curbW / 2, curbH / 2, -curbW / 2, curbH / 2, false); // unten
+            drawCurbSide(-curbW / 2, curbH / 2, -curbW / 2, -curbH / 2, true);  // links
+
+            // Mittellinien (zwei Fahrspuren angedeutet)
             ctx.strokeStyle = "rgba(255,255,255,0.35)";
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3;
             ctx.setLineDash([16, 18]);
-            ctx.lineCap = "round";
+
+            // vertikale Mittellinie
             ctx.beginPath();
-            for (let i = 0; i < trackPoints.length; i++) {
-                const p = worldToScreen(trackPoints[i].x, trackPoints[i].y, camX, camY);
-                if (i === 0) ctx.moveTo(p.x, p.y);
-                else ctx.lineTo(p.x, p.y);
-            }
-            ctx.closePath();
+            ctx.moveTo(0, -h / 2 + 40);
+            ctx.lineTo(0, h / 2 - 40);
             ctx.stroke();
+
+            // horizontale Mittellinie
+            ctx.beginPath();
+            ctx.moveTo(-w / 2 + 40, 0);
+            ctx.lineTo(w / 2 - 40, 0);
+            ctx.stroke();
+
             ctx.setLineDash([]);
+
             ctx.restore();
         }
 
@@ -430,11 +384,11 @@
             const camX = car.x;
             const camY = car.y;
 
-            // Hintergrund (Wiese)
+            // Hintergrund (Wiese / Stadtboden)
             ctx.fillStyle = "#133018";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // leichte City/Grass-Struktur
+            // leichte Struktur
             ctx.save();
             ctx.globalAlpha = 0.18;
             const sz = 200;
@@ -472,7 +426,6 @@
             if (respawn.visible) {
                 ctx.save();
                 ctx.translate(carScreen.x, carScreen.y);
-                // Auto „richtig herum“ zur Fahrtrichtung -> 90° drehen
                 ctx.rotate(car.angle + Math.PI / 2);
 
                 // Schatten
@@ -512,12 +465,12 @@
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
-                // Scheinwerfer
+                // Scheinwerfer (kleine Balken)
                 ctx.fillStyle = "#ffe9b0";
                 ctx.fillRect(-car.width * 0.4, -car.length * 0.5 - 1, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, -car.length * 0.5 - 1, car.width * 0.3, 4);
 
-                // Rücklichter (unten)
+                // Rücklichter
                 ctx.fillStyle = "#ff4040";
                 ctx.fillRect(-car.width * 0.4, car.length * 0.5 - 4, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, car.length * 0.5 - 4, car.width * 0.3, 4);
@@ -529,16 +482,38 @@
                 drawWheel(-car.width / 2 + 6, car.length / 2 - 18, 8, 4);
                 drawWheel(car.width / 2 - 6, car.length / 2 - 18, 8, 4);
 
-                // Lichtkegel (neu)
+                // Lichtkegel vor den Scheinwerfern
                 ctx.save();
                 ctx.globalAlpha = 0.35;
-                function headlightCone(offsetX) { /* wie oben */ }
+
+                function headlightCone(offsetX) {
+                    const frontY = -car.length * 0.5;
+                    const innerY = frontY - 4;
+                    const outerY = frontY - car.length * 1.5;
+                    const spread = car.width * 0.8;
+
+                    const grad = ctx.createLinearGradient(
+                        offsetX, innerY,
+                        offsetX, outerY
+                    );
+                    grad.addColorStop(0, "rgba(255, 233, 176, 0.9)");
+                    grad.addColorStop(1, "rgba(255, 233, 176, 0.0)");
+                    ctx.fillStyle = grad;
+
+                    ctx.beginPath();
+                    ctx.moveTo(offsetX - 4, innerY);
+                    ctx.lineTo(offsetX + 4, innerY);
+                    ctx.lineTo(offsetX + spread, outerY);
+                    ctx.lineTo(offsetX - spread, outerY);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
                 headlightCone(-car.width * 0.25);
                 headlightCone(car.width * 0.25);
 
-                ctx.restore();
-
-                ctx.restore();
+                ctx.restore(); // Lichtkegel
+                ctx.restore(); // Auto
             }
         }
 
