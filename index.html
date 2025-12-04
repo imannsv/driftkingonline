@@ -1,243 +1,228 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Drift Arcade 3D</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #111; font-family: system-ui, sans-serif; }
-    #overlay {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      padding: 8px 12px;
-      background: rgba(0,0,0,0.6);
-      color: #fff;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Drift Arcade 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #111;
+            font-family: system-ui, sans-serif;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-<div id="overlay">
-  <b>Drift Arcade 3D</b><br>
-  Steuerung: W / S = Gas / Bremse<br>
-  A / D = Lenken<br>
-  Space = Handbremse (mehr Drift)
-</div>
+    <div id="overlay">
+        <b>Drift Arcade 3D</b><br>
+        Steuerung: W / S = Gas / Bremse<br>
+        A / D = Lenken<br>
+        Space = Handbremse (mehr Drift)
+    </div>
 
-<script src="https://unpkg.com/three@0.165.0/build/three.min.js"></script>
+    <!-- Three.js von cdnjs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
 
-<script>
-  // === Grundsetup Szene ===
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb); // Cartoon-Himmel
+    <script>
+        console.log("Three.js Version:", THREE.REVISION);
 
-  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 5, -10);
+        // === Grundsetup Szene ===
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Cartoon-Himmel
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, -10);
 
-  // === Licht, Cartoon-Style ===
-  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-  scene.add(ambient);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-  dirLight.position.set(10, 20, 10);
-  scene.add(dirLight);
+        // === Licht ===
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambient);
 
-  // === Boden (Kartbahn / Parkplatz) ===
-  const groundGeo = new THREE.PlaneGeometry(200, 200);
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x3b3b3b,
-    roughness: 1,
-    metalness: 0,
-    flatShading: true
-  });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
 
-  // Ein paar einfache „Hindernisse“ als bunte Blöcke (Cartoon-Look)
-  const obstacleGeo = new THREE.BoxGeometry(3, 2, 6);
-  const colors = [0xff595e, 0xffca3a, 0x8ac926, 0x1982c4, 0x6a4c93];
-  for (let i = 0; i < 20; i++) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: colors[i % colors.length],
-      roughness: 1,
-      metalness: 0,
-      flatShading: true
-    });
-    const box = new THREE.Mesh(obstacleGeo, mat);
-    box.position.set(
-      (Math.random() - 0.5) * 150,
-      1,
-      (Math.random() - 0.5) * 150
-    );
-    scene.add(box);
-  }
+        // === Boden ===
+        const groundGeo = new THREE.PlaneGeometry(200, 200);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0x3b3b3b,
+            roughness: 1,
+            metalness: 0,
+            flatShading: true
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
 
-  // === Auto (Cartoon-Car) ===
-  const car = new THREE.Group();
+        // Hindernisse
+        const obstacleGeo = new THREE.BoxGeometry(3, 2, 6);
+        const colors = [0xff595e, 0xffca3a, 0x8ac926, 0x1982c4, 0x6a4c93];
+        for (let i = 0; i < 20; i++) {
+            const mat = new THREE.MeshStandardMaterial({
+                color: colors[i % colors.length],
+                roughness: 1,
+                metalness: 0,
+                flatShading: true
+            });
+            const box = new THREE.Mesh(obstacleGeo, mat);
+            box.position.set(
+                (Math.random() - 0.5) * 150,
+                1,
+                (Math.random() - 0.5) * 150
+            );
+            scene.add(box);
+        }
 
-  // Karosserie
-  const bodyGeo = new THREE.BoxGeometry(2.5, 0.7, 4);
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0xff4444,
-    roughness: 0.8,
-    metalness: 0,
-    flatShading: true
-  });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 0.6;
-  car.add(body);
+        // === Auto ===
+        const car = new THREE.Group();
 
-  // Dach
-  const topGeo = new THREE.BoxGeometry(1.6, 0.6, 2.0);
-  const topMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0,
-    flatShading: true
-  });
-  const top = new THREE.Mesh(topGeo, topMat);
-  top.position.set(0, 1.1, 0);
-  car.add(top);
+        const bodyGeo = new THREE.BoxGeometry(2.5, 0.7, 4);
+        const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0xff4444,
+            roughness: 0.8,
+            metalness: 0,
+            flatShading: true
+        });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        car.add(body);
 
-  // Räder (nur zur Optik, ohne echte Physik)
-  const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 10);
-  const wheelMat = new THREE.MeshStandardMaterial({
-    color: 0x111111,
-    roughness: 1,
-    metalness: 0.2,
-    flatShading: true
-  });
+        const topGeo = new THREE.BoxGeometry(1.6, 0.6, 2.0);
+        const topMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.9,
+            metalness: 0,
+            flatShading: true
+        });
+        const top = new THREE.Mesh(topGeo, topMat);
+        top.position.set(0, 1.1, 0);
+        car.add(top);
 
-  function createWheel(x, z) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(x, 0.3, z);
-    car.add(w);
-    return w;
-  }
+        const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 10);
+        const wheelMat = new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            roughness: 1,
+            metalness: 0.2,
+            flatShading: true
+        });
 
-  createWheel(-1.3, 1.5);
-  createWheel(1.3, 1.5);
-  createWheel(-1.3, -1.5);
-  createWheel(1.3, -1.5);
+        function createWheel(x, z) {
+            const w = new THREE.Mesh(wheelGeo, wheelMat);
+            w.rotation.z = Math.PI / 2;
+            w.position.set(x, 0.3, z);
+            car.add(w);
+        }
 
-  car.position.set(0, 0, 0);
-  scene.add(car);
+        createWheel(-1.3, 1.5);
+        createWheel(1.3, 1.5);
+        createWheel(-1.3, -1.5);
+        createWheel(1.3, -1.5);
 
-  // === Steuerung / Physik-Daten ===
-  const keys = {};
-  document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-  document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+        car.position.set(0, 0, 0);
+        scene.add(car);
 
-  let velocity = new THREE.Vector3(0, 0, 0);
-  let carAngle = 0;
+        // === Steuerung / Physik ===
+        const keys = {};
+        document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-  const maxSpeed = 1.6;             // generelle Geschwindigkeit
-  const accel = 0.06;               // Gas
-  const brake = 0.08;               // Bremsen
-  const baseFriction = 0.96;        // allgemeine Reibung
-  const driftSideFriction = 0.96;   // seitliche Reibung (für Drift)
-  const gripSideFriction = 0.8;     // seitliche Reibung (mehr Grip, weniger Drift)
-  const turnFactor = 0.045;         // Lenkempfindlichkeit
+        let velocity = new THREE.Vector3(0, 0, 0);
+        let carAngle = 0;
 
-  function updateCar(delta) {
-    // Keyboard input
-    const forward = keys['w'] || keys['arrowup'];
-    const back    = keys['s'] || keys['arrowdown'];
-    const left    = keys['a'] || keys['arrowleft'];
-    const right   = keys['d'] || keys['arrowright'];
-    const handbrake = keys[' ']; // Space
+        const maxSpeed = 1.6;
+        const accel = 0.06;
+        const brake = 0.08;
+        const baseFriction = 0.96;
+        const driftSideFriction = 0.96;
+        const gripSideFriction = 0.8;
+        const turnFactor = 0.045;
 
-    // Auto-Rotation als Quaternion
-    const quat = new THREE.Quaternion();
-    quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
+        function updateCar(delta) {
+            const forward = keys['w'] || keys['arrowup'];
+            const back = keys['s'] || keys['arrowdown'];
+            const left = keys['a'] || keys['arrowleft'];
+            const right = keys['d'] || keys['arrowright'];
+            const handbrake = keys[' '];
 
-    // Velocity -> Lokales Koordinatensystem des Autos
-    const invQuat = quat.clone().invert();
-    const localVel = velocity.clone().applyQuaternion(invQuat); // x = seitlich, z = vor/zurück
+            const quat = new THREE.Quaternion();
+            quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
 
-    // Gas/Bremse
-    if (forward) {
-      localVel.z -= accel;
-    }
-    if (back) {
-      localVel.z += brake * 0.7;
-    }
+            const invQuat = quat.clone().invert();
+            const localVel = velocity.clone().applyQuaternion(invQuat);
 
-    // Begrenze Speed in Fahrtrichtung (nur z)
-    const forwardSpeed = Math.abs(localVel.z);
-    if (forwardSpeed > maxSpeed) {
-      localVel.z = Math.sign(localVel.z) * maxSpeed;
-    }
+            if (forward) localVel.z -= accel;
+            if (back) localVel.z += brake * 0.7;
 
-    // Lenken: lenke abhängig von der Geschwindigkeit
-    const speedForTurn = THREE.MathUtils.clamp(forwardSpeed, 0, maxSpeed);
-    let steer = 0;
-    if (left) steer += 1;
-    if (right) steer -= 1;
-    carAngle += steer * turnFactor * (speedForTurn / maxSpeed);
+            const forwardSpeed = Math.abs(localVel.z);
+            if (forwardSpeed > maxSpeed) {
+                localVel.z = Math.sign(localVel.z) * maxSpeed;
+            }
 
-    // Drift vs. Grip über seitliche Reibung
-    const sideFriction = handbrake ? driftSideFriction : gripSideFriction;
-    localVel.x *= sideFriction;           // seitliche Bewegung (x) wird gedämpft
-    localVel.z *= baseFriction;          // leichte generelle Reibung
+            let steer = 0;
+            if (left) steer += 1;
+            if (right) steer -= 1;
+            const speedForTurn = THREE.MathUtils.clamp(forwardSpeed, 0, maxSpeed);
+            carAngle += steer * turnFactor * (speedForTurn / maxSpeed);
 
-    // Zurück in Weltkoordinaten
-    velocity.copy(localVel.applyQuaternion(quat));
+            const sideFriction = handbrake ? driftSideFriction : gripSideFriction;
+            localVel.x *= sideFriction;
+            localVel.z *= baseFriction;
 
-    // Position updaten
-    car.position.add(velocity);
+            velocity.copy(localVel.applyQuaternion(quat));
+            car.position.add(velocity);
+            car.position.y = 0;
+            car.rotation.y = carAngle;
+        }
 
-    // Höhe fixieren
-    car.position.y = 0;
+        const cameraTargetPos = new THREE.Vector3();
+        function updateCamera(delta) {
+            const camOffset = new THREE.Vector3(0, 4, 9);
+            const quat = new THREE.Quaternion();
+            quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
+            const worldOffset = camOffset.applyQuaternion(quat);
 
-    // Rotation des Autos setzen
-    car.rotation.y = carAngle;
-  }
+            cameraTargetPos.copy(car.position).add(worldOffset);
+            camera.position.lerp(cameraTargetPos, 0.08);
+            camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
+        }
 
-  // Kamera (Chase-Cam)
-  const cameraTargetPos = new THREE.Vector3();
-  function updateCamera(delta) {
-    const camOffset = new THREE.Vector3(0, 4, 9); // Höhe + hinter Auto
-    const quat = new THREE.Quaternion();
-    quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
-    const worldOffset = camOffset.applyQuaternion(quat);
+        let lastTime = performance.now();
+        function animate(now) {
+            requestAnimationFrame(animate);
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
 
-    cameraTargetPos.copy(car.position).add(worldOffset);
+            updateCar(delta);
+            updateCamera(delta);
+            renderer.render(scene, camera);
+        }
 
-    // Sanftes Nachziehen
-    camera.position.lerp(cameraTargetPos, 0.08);
-    camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
-  }
+        animate(lastTime);
 
-  // === Loop ===
-  let lastTime = performance.now();
-  function animate(now) {
-    requestAnimationFrame(animate);
-    const delta = (now - lastTime) / 1000;
-    lastTime = now;
-
-    updateCar(delta);
-    updateCamera(delta);
-
-    renderer.render(scene, camera);
-  }
-
-  animate(lastTime);
-
-  // === Resize ===
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-</script>
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
