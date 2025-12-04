@@ -129,15 +129,15 @@
         const CAR_ROT_Y = 0;   // rad
 
         const CAR_COLOR = 0x111111;
-        const TRACK_WIDTH = 20;
+        const TRACK_WIDTH = 22;
         const SKY_COLOR = 0x8fd3ff;
 
         // Physik
         let speed = 0;
-        let maxSpeed = 1.8;
-        let baseAcceleration = 0.015;
+        let maxSpeed = 1.9;
+        let baseAcceleration = 0.016;
         let reverseSpeed = 0.7;
-        let turnSpeed = 0.045;
+        let turnSpeed = 0.048;
 
         let currentDriftAngle = 0;
         let targetDriftAngle = 0;
@@ -151,7 +151,6 @@
         let tires = [], particles = [];
         let obstacles = [];
 
-        // HUD
         const speedLabel = document.getElementById('speed-text');
         let lastTime = performance.now();
 
@@ -173,7 +172,7 @@
                 3000
             );
 
-            miniCamera = new THREE.OrthographicCamera(-80, 80, 80, -80, 0.1, 1000);
+            miniCamera = new THREE.OrthographicCamera(-90, 90, 90, -90, 0.1, 1000);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -186,7 +185,7 @@
             const ambient = new THREE.AmbientLight(0xffffff, 0.7);
             scene.add(ambient);
 
-            const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+            const sun = new THREE.DirectionalLight(0xffffff, 1.15);
             sun.position.set(300, 500, 300);
             sun.castShadow = true;
             sun.shadow.mapSize.set(2048, 2048);
@@ -198,9 +197,9 @@
 
             createGround();
             createCityRoads();
-            createBuildings();
-            createParkAreas();
-            createBridgeArea();
+            createBlocksAndBuildings();
+            createCityPark();
+            createBridgeHighway();
             createParkingGarage();
             createCar();
 
@@ -209,116 +208,224 @@
             window.addEventListener('resize', onResize);
         }
 
-        // === Umgebung ===
+        // ==========================================
+        // Environment – GTA-Style Downtown
+        // ==========================================
 
         function createGround() {
+            // Großflächige Stadtfläche (dunkelgrau)
             const baseGeo = new THREE.PlaneGeometry(4000, 4000);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e5b2e, roughness: 1 });
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.95 });
             const base = new THREE.Mesh(baseGeo, baseMat);
             base.rotation.x = -Math.PI / 2;
-            base.position.y = -0.2;
+            base.position.y = -0.25;
             base.receiveShadow = true;
             scene.add(base);
+
+            // etwas Rand-Grün an den Ecken (Vorstadt-Feeling)
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x2f7f3b, roughness: 1 });
+            const cornerGeo = new THREE.PlaneGeometry(500, 500);
+            const corners = [
+                [-800, -800],
+                [800, -800],
+                [-800, 800],
+                [800, 800]
+            ];
+            corners.forEach(([x, z]) => {
+                const g = new THREE.Mesh(cornerGeo, grassMat);
+                g.rotation.x = -Math.PI / 2;
+                g.position.set(x, -0.24, z);
+                g.receiveShadow = true;
+                scene.add(g);
+            });
         }
 
         function createCityRoads() {
-            const roadMat = new THREE.MeshStandardMaterial({ color: 0x33363f, roughness: 0.9 });
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x25282f, roughness: 0.9 });
             const lineMat = new THREE.MeshBasicMaterial({ color: 0xf7f7f7 });
+            const sideLine = new THREE.MeshBasicMaterial({ color: 0xdddddd });
 
-            function addRoad(x, z, w, h) {
-                const road = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, h), roadMat);
-                road.position.set(x, 0, z);
+            const grid = [-300, -150, 0, 150, 300]; // Raster wie Kreuzungen in GTA
+
+            // horizontale Straßen
+            grid.forEach(z => {
+                const road = new THREE.Mesh(
+                    new THREE.BoxGeometry(900, 0.15, TRACK_WIDTH),
+                    roadMat
+                );
+                road.position.set(0, -0.05, z);
                 road.receiveShadow = true;
                 scene.add(road);
+
+                // Mittelstrich
+                const lineGeo = new THREE.BoxGeometry(4, 0.17, 30);
+                for (let x = -420; x <= 420; x += 60) {
+                    const line = new THREE.Mesh(lineGeo, lineMat);
+                    line.position.set(x, 0.02, z);
+                    scene.add(line);
+                }
+
+                // Seitenlinien
+                const borderGeo = new THREE.BoxGeometry(2, 0.18, 900);
+                const leftB = new THREE.Mesh(borderGeo, sideLine);
+                leftB.position.set(-TRACK_WIDTH / 2, 0.03, z);
+                const rightB = leftB.clone();
+                rightB.position.x = TRACK_WIDTH / 2;
+                scene.add(leftB, rightB);
+            });
+
+            // vertikale Straßen
+            grid.forEach(x => {
+                const road = new THREE.Mesh(
+                    new THREE.BoxGeometry(TRACK_WIDTH, 0.15, 900),
+                    roadMat
+                );
+                road.position.set(x, -0.05, 0);
+                road.receiveShadow = true;
+                scene.add(road);
+
+                // Mittelstrich
+                const lineGeo = new THREE.BoxGeometry(4, 0.17, 30);
+                for (let z = -420; z <= 420; z += 60) {
+                    const line = new THREE.Mesh(lineGeo, lineMat);
+                    line.rotation.y = Math.PI / 2;
+                    line.position.set(x, 0.02, z);
+                    scene.add(line);
+                }
+
+                // Seitenlinien
+                const borderGeo = new THREE.BoxGeometry(2, 0.18, 900);
+                const frontB = new THREE.Mesh(borderGeo, sideLine);
+                frontB.rotation.y = Math.PI / 2;
+                frontB.position.set(x, 0.03, -TRACK_WIDTH / 2);
+                const backB = frontB.clone();
+                backB.position.z = TRACK_WIDTH / 2;
+                scene.add(frontB, backB);
+            });
+
+            // Zebrastreifen an zentraler Kreuzung
+            createCrosswalk(0, 0);
+        }
+
+        function createCrosswalk(cx, cz) {
+            const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const stripeGeo = new THREE.BoxGeometry(3, 0.18, 1.5);
+
+            // quer über Nord-Süd Straße
+            for (let i = -6; i <= 6; i++) {
+                const s = new THREE.Mesh(stripeGeo, stripeMat);
+                s.position.set(cx + i * 2.6, 0.04, cz + TRACK_WIDTH / 2 + 2);
+                scene.add(s);
             }
 
-            // Hauptachsen
-            addRoad(0, 0, 800, TRACK_WIDTH);
-            addRoad(0, -200, 800, TRACK_WIDTH);
-            addRoad(0, 200, 800, TRACK_WIDTH);
-
-            addRoad(-200, 0, TRACK_WIDTH, 800);
-            addRoad(200, 0, TRACK_WIDTH, 800);
-            addRoad(0, 0, TRACK_WIDTH, 800);
-
-            // Nebenstraßen
-            addRoad(-450, 0, 300, TRACK_WIDTH * 0.8);
-            addRoad(450, 0, 300, TRACK_WIDTH * 0.8);
-            addRoad(0, -450, TRACK_WIDTH * 0.8, 300);
-            addRoad(0, 450, TRACK_WIDTH * 0.8, 300);
-
-            const lineGeo = new THREE.BoxGeometry(4, 0.11, 40);
-            for (let x = -380; x <= 380; x += 60) {
-                const line = new THREE.Mesh(lineGeo, lineMat);
-                line.position.set(x, 0.06, 0);
-                scene.add(line);
+            // quer über Ost-West Straße
+            for (let i = -6; i <= 6; i++) {
+                const s = new THREE.Mesh(stripeGeo, stripeMat);
+                s.rotation.y = Math.PI / 2;
+                s.position.set(cx - TRACK_WIDTH / 2 - 2, 0.04, cz + i * 2.6);
+                scene.add(s);
             }
         }
 
-        function createBuildings() {
+        function createBlocksAndBuildings() {
             const buildingColors = [0x1f2933, 0x262f3d, 0x353f4f, 0x202833];
-            const roofMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.7 });
 
-            function addBuilding(x, z, w, d, h) {
-                const bodyMat = new THREE.MeshStandardMaterial({
-                    color: buildingColors[Math.floor(Math.random() * buildingColors.length)],
-                    roughness: 0.95,
-                    metalness: 0.05
-                });
+            function addBuildingBlock(centerX, centerZ, blockW, blockD, pattern) {
+                // pattern: 'towers' | 'mid' | 'residential'
+                const rows = 2;
+                const cols = 2;
+                const padding = 12;
+                const cellW = (blockW - padding * 3) / cols;
+                const cellD = (blockD - padding * 3) / rows;
 
-                const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
-                body.position.set(x, h / 2, z);
-                body.castShadow = true;
-                body.receiveShadow = true;
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const bx = centerX - blockW / 2 + padding + cellW / 2 + c * (cellW + padding);
+                        const bz = centerZ - blockD / 2 + padding + cellD / 2 + r * (cellD + padding);
 
-                const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 1, d * 1.02), roofMat);
-                roof.position.set(x, h + 0.5, z);
-                roof.castShadow = true;
+                        let baseH;
+                        if (pattern === 'towers') {
+                            baseH = 80 + Math.random() * 60;
+                        } else if (pattern === 'mid') {
+                            baseH = 45 + Math.random() * 35;
+                        } else {
+                            baseH = 25 + Math.random() * 20;
+                        }
 
-                scene.add(body);
-                scene.add(roof);
+                        const bodyMat = new THREE.MeshStandardMaterial({
+                            color: buildingColors[Math.floor(Math.random() * buildingColors.length)],
+                            roughness: 0.95,
+                            metalness: 0.05
+                        });
 
-                const radius = Math.max(w, d) * 0.6;
-                obstacles.push({ pos: new THREE.Vector3(x, 0, z), radius: radius });
+                        const body = new THREE.Mesh(
+                            new THREE.BoxGeometry(cellW * 0.9, baseH, cellD * 0.9),
+                            bodyMat
+                        );
+                        body.position.set(bx, baseH / 2, bz);
+                        body.castShadow = true;
+                        body.receiveShadow = true;
+
+                        const roof = new THREE.Mesh(
+                            new THREE.BoxGeometry(cellW * 0.92, 1.3, cellD * 0.92),
+                            new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.7 })
+                        );
+                        roof.position.set(bx, baseH + 0.6, bz);
+                        roof.castShadow = true;
+
+                        scene.add(body, roof);
+
+                        const radius = Math.max(cellW, cellD) * 0.6;
+                        obstacles.push({ pos: new THREE.Vector3(bx, 0, bz), radius });
+                    }
+                }
             }
 
-            for (let i = -3; i <= 3; i++) {
-                if (i === 0) continue;
-                const x = i * 120;
-                addBuilding(x, -280, 50, 70, 60 + Math.random() * 60);
-                addBuilding(x, 280, 50, 70, 50 + Math.random() * 70);
-            }
+            // Blöcke zwischen den Straßen (4x4 Blocks um Zentrum)
+            const centers = [
+                [-225, -225, 'towers'],    // Downtown-Skyscraper
+                [0, -225, 'mid'],       // Büroblock
+                [225, -225, 'residential'],
 
-            for (let j = -3; j <= 3; j++) {
-                if (j === 0) continue;
-                const z = j * 120;
-                addBuilding(-280, z, 70, 50, 50 + Math.random() * 70);
-                addBuilding(280, z, 70, 50, 60 + Math.random() * 60);
-            }
+                [-225, 0, 'mid'],
+                [225, 0, 'mid'],
 
-            addBuilding(-350, -350, 70, 70, 140);
-            addBuilding(360, 330, 60, 60, 130);
+                [-225, 225, 'residential'],
+                [0, 225, 'mid'],
+                [225, 225, 'residential']
+            ];
+
+            centers.forEach(([x, z, pattern]) => {
+                addBuildingBlock(x, z, 120, 120, pattern);
+            });
         }
 
-        function createParkAreas() {
+        function createCityPark() {
+            // Stadtpark nahe Zentrum
             const parkMat = new THREE.MeshStandardMaterial({ color: 0x3ba857, roughness: 0.9 });
             const pathMat = new THREE.MeshStandardMaterial({ color: 0xd3d3d3, roughness: 0.8 });
 
-            const park = new THREE.Mesh(new THREE.BoxGeometry(260, 0.1, 260), parkMat);
-            park.position.set(-350, 0.02, 200);
+            const park = new THREE.Mesh(new THREE.BoxGeometry(160, 0.12, 140), parkMat);
+            park.position.set(-225, -0.03, 60);
             park.receiveShadow = true;
             scene.add(park);
 
-            const path = new THREE.Mesh(new THREE.BoxGeometry(30, 0.12, 200), pathMat);
-            path.position.set(-350, 0.04, 200);
-            scene.add(path);
+            // Wege
+            const mainPath = new THREE.Mesh(new THREE.BoxGeometry(12, 0.14, 140), pathMat);
+            mainPath.position.set(-225, 0.01, 60);
+            scene.add(mainPath);
 
-            const trunkGeo = new THREE.CylinderGeometry(1.2, 1.5, 6, 6);
+            const crossPath = new THREE.Mesh(new THREE.BoxGeometry(160, 0.14, 10), pathMat);
+            crossPath.position.set(-225, 0.01, 60);
+            scene.add(crossPath);
+
+            // Bäume
+            const trunkGeo = new THREE.CylinderGeometry(1, 1.3, 6, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b3b1f });
-            const leafGeo = new THREE.SphereGeometry(4.5, 8, 8);
+            const leafGeo = new THREE.SphereGeometry(4.2, 8, 8);
             const leafMat = new THREE.MeshStandardMaterial({ color: 0x247b37 });
 
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 18; i++) {
                 const tree = new THREE.Group();
                 const trunk = new THREE.Mesh(trunkGeo, trunkMat);
                 trunk.position.y = 3;
@@ -328,57 +435,56 @@
                 crown.castShadow = true;
                 tree.add(trunk, crown);
 
-                const rx = -420 + Math.random() * 140;
-                const rz = 120 + Math.random() * 160;
+                const rx = -225 - 65 + Math.random() * 130;
+                const rz = 60 - 55 + Math.random() * 110;
                 tree.position.set(rx, 0, rz);
                 scene.add(tree);
 
-                obstacles.push({ pos: new THREE.Vector3(rx, 0, rz), radius: 5 });
+                obstacles.push({ pos: new THREE.Vector3(rx, 0, rz), radius: 4.5 });
             }
         }
 
-        function createBridgeArea() {
-            const bridgeGroup = new THREE.Group();
+        function createBridgeHighway() {
+            const group = new THREE.Group();
 
             const deckMat = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.6 });
             const sideMat = new THREE.MeshStandardMaterial({ color: 0x22252e, roughness: 0.8 });
 
-            const deck = new THREE.Mesh(new THREE.BoxGeometry(180, 2, 14), deckMat);
-            deck.position.set(0, 12, -260);
+            // Elevated Highway diagonal über die City (wie GTA-Expressway)
+            const length = 520;
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(length, 3, 18), deckMat);
+            deck.position.set(0, 22, -260);
+            deck.rotation.y = Math.PI / 6;
             deck.castShadow = true;
             deck.receiveShadow = true;
-            bridgeGroup.add(deck);
+            group.add(deck);
 
-            const railGeo = new THREE.BoxGeometry(180, 1.2, 0.5);
+            // Geländer
+            const railGeo = new THREE.BoxGeometry(length, 1.2, 0.7);
             const railL = new THREE.Mesh(railGeo, sideMat);
-            railL.position.set(0, 13.5, -267);
+            railL.position.set(0, 24, -260 - 9);
+            railL.rotation.y = Math.PI / 6;
+
             const railR = railL.clone();
-            railR.position.z = -253;
-            railL.castShadow = railR.castShadow = true;
-            bridgeGroup.add(railL, railR);
+            railR.position.z = -260 + 9;
+            group.add(railL, railR);
 
-            const pillarGeo = new THREE.BoxGeometry(4, 12, 4);
+            // Pfeiler
+            const pillarGeo = new THREE.BoxGeometry(4, 22, 4);
             const pillarMat = new THREE.MeshStandardMaterial({ color: 0x4b4f59, roughness: 0.9 });
-            const px = [-70, 70];
-            const pz = [-255, -265];
-            px.forEach(x => {
-                pz.forEach(z => {
-                    const p = new THREE.Mesh(pillarGeo, pillarMat);
-                    p.position.set(x, 6, z);
-                    p.castShadow = true;
-                    p.receiveShadow = true;
-                    bridgeGroup.add(p);
-                    obstacles.push({ pos: new THREE.Vector3(x, 0, z), radius: 5 });
-                });
-            });
 
-            const underMat = new THREE.MeshStandardMaterial({ color: 0x2f323a, roughness: 0.9 });
-            const underRoad = new THREE.Mesh(new THREE.BoxGeometry(200, 0.1, TRACK_WIDTH), underMat);
-            underRoad.position.set(0, 0.02, -260);
-            underRoad.receiveShadow = true;
-            bridgeGroup.add(underRoad);
+            for (let i = -2; i <= 2; i++) {
+                const p = new THREE.Mesh(pillarGeo, pillarMat);
+                const t = i / 2;
+                p.position.set(t * 260, 11, -260 + t * 80);
+                p.castShadow = true;
+                p.receiveShadow = true;
+                group.add(p);
 
-            scene.add(bridgeGroup);
+                obstacles.push({ pos: new THREE.Vector3(p.position.x, 0, p.position.z), radius: 6 });
+            }
+
+            scene.add(group);
         }
 
         function createParkingGarage() {
@@ -411,6 +517,7 @@
                 });
             }
 
+            // optische Rampe
             const ramp = new THREE.Mesh(
                 new THREE.BoxGeometry(20, 0.6, 40),
                 floorMat
@@ -420,19 +527,22 @@
             ramp.castShadow = true;
             group.add(ramp);
 
-            group.position.set(320, 0, 220);
+            // Garage an markanter Ecke
+            group.position.set(300, 0, 180);
             scene.add(group);
 
-            obstacles.push({ pos: new THREE.Vector3(320, 0, 220), radius: 70 });
+            obstacles.push({ pos: new THREE.Vector3(300, 0, 180), radius: 70 });
         }
 
-        // === Auto ===
+        // ==========================================
+        // Auto
+        // ==========================================
 
         function createCar() {
             playerGroup = new THREE.Group();
             carModel = new THREE.Group();
-            playerGroup.position.set(0, 0.5, 40);
-            playerGroup.rotation.y = Math.PI;
+            playerGroup.position.set(0, 0.5, 40);     // Start leicht über der zentralen Kreuzung
+            playerGroup.rotation.y = Math.PI;        // Richtung "Innenstadt"
             playerGroup.add(carModel);
             scene.add(playerGroup);
 
@@ -478,7 +588,9 @@
             );
         }
 
-        // === Input ===
+        // ==========================================
+        // Input
+        // ==========================================
 
         function onKeyDown(e) {
             const k = e.key.toLowerCase();
@@ -503,7 +615,9 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // === Effekte ===
+        // ==========================================
+        // Effekte
+        // ==========================================
 
         function spawnSmoke(pos) {
             if (Math.random() > 0.4) return;
@@ -532,7 +646,9 @@
             }
         }
 
-        // === Main Loop ===
+        // ==========================================
+        // Main Loop
+        // ==========================================
 
         function animate(now) {
             requestAnimationFrame(animate);
@@ -544,7 +660,7 @@
             updateMiniMapCamera();
             updateParticles();
 
-            const displaySpeed = Math.min(Math.floor(Math.abs(speed) * 140), 320);
+            const displaySpeed = Math.min(Math.floor(Math.abs(speed) * 150), 340);
             speedLabel.textContent = displaySpeed.toString();
 
             renderer.clear();
@@ -561,7 +677,9 @@
             renderer.setScissorTest(false);
         }
 
-        // === Physik ===
+        // ==========================================
+        // Physik & Kamera
+        // ==========================================
 
         function updatePhysics(delta) {
             if (keys.w) {
@@ -622,20 +740,20 @@
         }
 
         function updateCamera() {
-            const relativeCamOffset = new THREE.Vector3(0, 3.2, 8.5);
+            const relativeCamOffset = new THREE.Vector3(0, 3.4, 8.8);
             const cameraOffset = relativeCamOffset.applyMatrix4(playerGroup.matrixWorld);
             camera.position.lerp(cameraOffset, 0.12);
 
-            const lookAtTarget = new THREE.Vector3(0, 1.8, -6);
+            const lookAtTarget = new THREE.Vector3(0, 1.9, -6);
             lookAtTarget.applyMatrix4(playerGroup.matrixWorld);
             camera.lookAt(lookAtTarget);
         }
 
         function updateMiniMapCamera() {
             const target = playerGroup.position.clone();
-            miniCamera.position.set(target.x, 120, target.z);
+            miniCamera.position.set(target.x, 130, target.z);
             miniCamera.lookAt(target);
-            miniCamera.rotation.z = 0;
+            miniCamera.rotation.z = 0; // Nord nach oben
         }
     </script>
 </body>
