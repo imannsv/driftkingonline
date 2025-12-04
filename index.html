@@ -106,16 +106,18 @@
         body.position.y = 0.6;
         car.add(body);
 
-        const topGeo = new THREE.BoxGeometry(1.6, 0.6, 2.0);
-        const topMat = new THREE.MeshStandardMaterial({
+        // Dach
+        const roofGeo = new THREE.BoxGeometry(1.6, 0.6, 2.0);
+        const roofMat = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             roughness: 0.9,
             metalness: 0,
             flatShading: true
         });
-        const top = new THREE.Mesh(topGeo, topMat);
-        top.position.set(0, 1.1, 0);
-        car.add(top);
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.set(0, 1.1, 0);
+        car.add(roof);
+
 
         const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 10);
         const wheelMat = new THREE.MeshStandardMaterial({
