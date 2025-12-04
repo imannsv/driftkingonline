@@ -173,13 +173,14 @@
             vy: 0,
             width: 28,         // optische Breite
             length: 60,        // optische Länge
-            maxSpeed: 60,      // faires Arcadetempo
-            acceleration: 90,  // fühlbare Beschleunigung
-            brake: 140,
-            friction: 2.3,
-            grip: 9,
-            handbrakeGrip: 3,
-            steering: 190      // Grad / Sekunde (direkter als vorher)
+            maxSpeed: 120,        // doppelte Topspeed
+            acceleration: 190,    // viel stärkere Beschleunigung
+            brake: 180,           // stärkeres Bremsen
+            friction: 2.0,        // leicht weniger Bodenhaftung = schnelleres Ausrollen
+            grip: 7,              // etwas weniger Grip = leichter ins Driften
+            handbrakeGrip: 2.2,   // Handbremse hat mehr Wirkung
+            steering: 220         // direkteres Lenkgefühl bei hoher Geschwindigkeit
+
         };
 
         const respawn = {
