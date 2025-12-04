@@ -43,365 +43,357 @@
         Space = Handbremse (Drift)
     </div>
 
-    <!-- Three.js + GLTFLoader -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
 
-    <script>
-        window.onload = () => {
+        // ===== Grundsetup =====
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x9ad9ff);
+        scene.fog = new THREE.Fog(0x9ad9ff, 80, 260);
 
-            // ===== Grundsetup =====
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x9ad9ff);
-            scene.fog = new THREE.Fog(0x9ad9ff, 80, 260);
+        const camera = new THREE.PerspectiveCamera(
+            70,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 5, -12);
 
-            const camera = new THREE.PerspectiveCamera(
-                70,
-                window.innerWidth / window.innerHeight,
-                0.1,
-                1000
-            );
-            camera.position.set(0, 5, -12);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambient);
 
-            const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-            scene.add(ambient);
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(40, 60, 10);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(1024, 1024);
+        scene.add(sun);
 
-            const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-            sun.position.set(40, 60, 10);
-            sun.castShadow = true;
-            sun.shadow.mapSize.set(1024, 1024);
-            scene.add(sun);
+        // ===== Boden / Map =====
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(400, 400),
+            new THREE.MeshStandardMaterial({
+                color: 0x6b7684,
+                roughness: 1,
+                flatShading: true
+            })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
 
-            // ===== Boden / Map =====
-            const ground = new THREE.Mesh(
-                new THREE.PlaneGeometry(400, 400),
+        const track = new THREE.Mesh(
+            new THREE.PlaneGeometry(90, 160),
+            new THREE.MeshStandardMaterial({
+                color: 0x232530,
+                roughness: 1,
+                flatShading: true
+            })
+        );
+        track.rotation.x = -Math.PI / 2;
+        track.position.y = 0.02;
+        scene.add(track);
+
+        function createLine(width, height, x, z) {
+            const m = new THREE.Mesh(
+                new THREE.PlaneGeometry(width, height),
                 new THREE.MeshStandardMaterial({
-                    color: 0x6b7684,
+                    color: 0xffffff,
                     roughness: 1,
-                    flatShading: true
+                    flatShading: true,
+                    side: THREE.DoubleSide
                 })
             );
-            ground.rotation.x = -Math.PI / 2;
-            ground.receiveShadow = true;
-            scene.add(ground);
+            m.rotation.x = -Math.PI / 2;
+            m.position.set(x, 0.03, z);
+            scene.add(m);
+        }
 
-            const track = new THREE.Mesh(
-                new THREE.PlaneGeometry(90, 160),
-                new THREE.MeshStandardMaterial({
-                    color: 0x232530,
-                    roughness: 1,
-                    flatShading: true
-                })
-            );
-            track.rotation.x = -Math.PI / 2;
-            track.position.y = 0.02;
-            scene.add(track);
+        createLine(90, 1, 0, 78);
+        createLine(90, 1, 0, -78);
+        createLine(1, 160, 46, 0);
+        createLine(1, 160, -46, 0);
+        createLine(4, 40, 0, 0);
 
-            function createLine(width, height, x, z) {
-                const m = new THREE.Mesh(
-                    new THREE.PlaneGeometry(width, height),
-                    new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
-                        roughness: 1,
-                        flatShading: true,
-                        side: THREE.DoubleSide
-                    })
-                );
-                m.rotation.x = -Math.PI / 2;
-                m.position.set(x, 0.03, z);
-                scene.add(m);
-            }
+        const donut = new THREE.Mesh(
+            new THREE.CircleGeometry(12, 40),
+            new THREE.MeshStandardMaterial({
+                color: 0x1e1f26,
+                roughness: 0.9,
+                flatShading: true
+            })
+        );
+        donut.rotation.x = -Math.PI / 2;
+        donut.position.y = 0.025;
+        donut.position.z = 30;
+        scene.add(donut);
 
-            // Rand / Markierungen
-            createLine(90, 1, 0, 78);
-            createLine(90, 1, 0, -78);
-            createLine(1, 160, 46, 0);
-            createLine(1, 160, -46, 0);
-            createLine(4, 40, 0, 0);
-
-            // kleine „Drift-Zone“ in der Mitte
-            const donut = new THREE.Mesh(
-                new THREE.CircleGeometry(12, 40),
-                new THREE.MeshStandardMaterial({
-                    color: 0x1e1f26,
-                    roughness: 0.9,
-                    flatShading: true
-                })
-            );
-            donut.rotation.x = -Math.PI / 2;
-            donut.position.y = 0.025;
-            donut.position.z = 30;
-            scene.add(donut);
-
-            // Hintergrundblöcke
-            const blockColors = [0xff9aa2, 0xffe29f, 0xbaffc9, 0xa0c4ff, 0xd4b5ff];
-            const blockGeo = new THREE.BoxGeometry(16, 18, 12);
-            for (let i = 0; i < 18; i++) {
-                const mat = new THREE.MeshStandardMaterial({
-                    color: blockColors[i % blockColors.length],
-                    roughness: 1,
-                    flatShading: true
-                });
-                const b = new THREE.Mesh(blockGeo, mat);
-                b.castShadow = true;
-                b.receiveShadow = true;
-                const side = Math.random() > 0.5 ? 1 : -1;
-                b.position.set(
-                    side * (80 + Math.random() * 80),
-                    9,
-                    (Math.random() - 0.5) * 260
-                );
-                scene.add(b);
-            }
-
-            // ein paar Leitplanken
-            function guardrail(x, z, length, rotY) {
-                const g = new THREE.Mesh(
-                    new THREE.BoxGeometry(length, 1.2, 0.4),
-                    new THREE.MeshStandardMaterial({
-                        color: 0xe5e5e5,
-                        roughness: 0.7,
-                        flatShading: true
-                    })
-                );
-                g.position.set(x, 0.9, z);
-                g.rotation.y = rotY;
-                g.castShadow = true;
-                scene.add(g);
-            }
-            guardrail(0, 86, 70, 0);
-            guardrail(0, -86, 70, 0);
-            guardrail(50, 0, 160, Math.PI / 2);
-            guardrail(-50, 0, 160, Math.PI / 2);
-
-            // ===== CLS-Modell laden =====
-            let car = null;
-            let carReady = false;
-
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'mersedes_cls63.glb',            // <-- Datei muss neben index.html liegen
-                (gltf) => {
-                    car = gltf.scene;
-                    car.traverse(obj => {
-                        if (obj.isMesh) {
-                            obj.castShadow = true;
-                            obj.receiveShadow = true;
-                            if (obj.material) {
-                                obj.material.flatShading = true;
-                                obj.material.needsUpdate = true;
-                            }
-                        }
-                    });
-
-                    // ggf. skalieren / ausrichten (anpassen falls nötig)
-                    car.scale.set(1, 1, 1);
-                    car.rotation.y = Math.PI; // Modell schaut evtl. in +Z, wir wollen nach -Z
-                    car.position.set(0, 0, -30);
-
-                    scene.add(car);
-                    carReady = true;
-                },
-                undefined,
-                (err) => console.error('Fehler beim Laden des Modells', err)
-            );
-
-            // ===== Steuerung / Physik =====
-            const keys = {};
-            document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-            document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-
-            let velocity = new THREE.Vector3(0, 0, 0);
-            let carAngle = 0;
-
-            const accel = 0.11;
-            const brake = 0.16;
-            const maxSpeed = 3.2;
-            const baseFriction = 0.96;
-            const gripSideFriction = 0.91;
-            const driftSideFriction = 0.985;
-            const turnFactor = 0.09;
-
-            // ===== Reifenspuren =====
-            const skidSegments = [];
-            let skidIndex = 0;
-            const maxSkids = 350;
-
-            function spawnSkidAt(pos, angle) {
-                let seg;
-                if (skidSegments.length < maxSkids) {
-                    const geo = new THREE.PlaneGeometry(1.2, 0.25);
-                    const mat = new THREE.MeshBasicMaterial({
-                        color: 0x000000,
-                        transparent: true,
-                        opacity: 0.55
-                    });
-                    seg = new THREE.Mesh(geo, mat);
-                    seg.rotation.x = -Math.PI / 2;
-                    seg.position.y = 0.031;
-                    scene.add(seg);
-                    skidSegments.push(seg);
-                } else {
-                    seg = skidSegments[skidIndex];
-                    skidIndex = (skidIndex + 1) % maxSkids;
-                }
-                seg.position.x = pos.x;
-                seg.position.z = pos.z;
-                seg.rotation.y = angle;
-            }
-
-            // ===== Rauch-Partikel =====
-            const smokeParticles = [];
-            const smokeTexture = createSmokeTexture();
-
-            function createSmokeTexture() {
-                const size = 64;
-                const c = document.createElement('canvas');
-                c.width = c.height = size;
-                const ctx = c.getContext('2d');
-                const g = ctx.createRadialGradient(
-                    size / 2, size / 2, 5,
-                    size / 2, size / 2, size / 2
-                );
-                g.addColorStop(0, 'rgba(255,255,255,0.8)');
-                g.addColorStop(1, 'rgba(255,255,255,0)');
-                ctx.fillStyle = g;
-                ctx.fillRect(0, 0, size, size);
-                return new THREE.CanvasTexture(c);
-            }
-
-            function spawnSmokeAt(pos) {
-                const mat = new THREE.SpriteMaterial({
-                    map: smokeTexture,
-                    transparent: true,
-                    opacity: 0.7,
-                    depthWrite: false
-                });
-                const sprite = new THREE.Sprite(mat);
-                sprite.position.copy(pos);
-                sprite.position.y += 0.3;
-                sprite.scale.set(1.3, 1.3, 1.3);
-                sprite.userData.life = 0.8; // Sekunden
-                smokeParticles.push(sprite);
-                scene.add(sprite);
-            }
-
-            function updateSmoke(delta) {
-                for (let i = smokeParticles.length - 1; i >= 0; i--) {
-                    const s = smokeParticles[i];
-                    s.userData.life -= delta;
-                    if (s.userData.life <= 0) {
-                        scene.remove(s);
-                        smokeParticles.splice(i, 1);
-                    } else {
-                        s.position.y += delta * 0.7;
-                        s.material.opacity = s.userData.life / 0.8;
-                        const scale = 1.3 + (0.8 - s.userData.life) * 1.2;
-                        s.scale.set(scale, scale, scale);
-                    }
-                }
-            }
-
-            // ===== Update-Funktionen =====
-            function updateCar(delta) {
-                if (!carReady) return;
-
-                const forward = keys['w'] || keys['arrowup'];
-                const back = keys['s'] || keys['arrowdown'];
-                const left = keys['a'] || keys['arrowleft'];
-                const right = keys['d'] || keys['arrowright'];
-                const handbrake = keys[' '];
-
-                const quat = new THREE.Quaternion();
-                quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
-
-                const invQuat = quat.clone().invert();
-                const localVel = velocity.clone().applyQuaternion(invQuat);
-
-                const factor = delta * 60;
-
-                if (forward) localVel.z -= accel * factor;
-                if (back) localVel.z += brake * factor * 0.7;
-
-                const speed = Math.abs(localVel.z);
-                if (speed > maxSpeed) {
-                    localVel.z = Math.sign(localVel.z) * maxSpeed;
-                }
-
-                let steer = 0;
-                if (left) steer += 1;
-                if (right) steer -= 1;
-                const steerStrength = Math.min(1, speed / (maxSpeed * 0.5));
-                carAngle += steer * turnFactor * steerStrength;
-
-                const sideFriction = handbrake ? driftSideFriction : gripSideFriction;
-                localVel.x *= sideFriction;
-                localVel.z *= baseFriction;
-
-                velocity.copy(localVel).applyQuaternion(quat);
-                car.position.add(velocity);
-                car.position.y = 0;
-
-                car.rotation.y = carAngle + Math.PI; // +π, weil wir das Modell gedreht haben
-                car.rotation.z = -steer * steerStrength * 0.12;
-
-                // Drift-Erkennung
-                const sidewaysSpeed = Math.abs(localVel.x);
-                const drifting = (sidewaysSpeed > 0.25 && speed > 0.6) || handbrake;
-
-                // Positionen der Hinterräder (lokale Offsets grob geschätzt)
-                const rearOffsetLeft = new THREE.Vector3(-1.2, 0, -2.2);
-                const rearOffsetRight = new THREE.Vector3(1.2, 0, -2.2);
-                const rearLeftWorld = rearOffsetLeft.clone().applyQuaternion(quat).add(car.position);
-                const rearRightWorld = rearOffsetRight.clone().applyQuaternion(quat).add(car.position);
-
-                if (drifting) {
-                    spawnSkidAt(rearLeftWorld, carAngle);
-                    spawnSkidAt(rearRightWorld, carAngle);
-                    spawnSmokeAt(rearLeftWorld);
-                    spawnSmokeAt(rearRightWorld);
-                }
-            }
-
-            const cameraTargetPos = new THREE.Vector3();
-            function updateCamera(delta) {
-                if (!carReady) return;
-                const offset = new THREE.Vector3(0, 4, 11);
-                const quat = new THREE.Quaternion();
-                quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
-                const worldOffset = offset.applyQuaternion(quat);
-                cameraTargetPos.copy(car.position).add(worldOffset);
-                camera.position.lerp(cameraTargetPos, 0.08);
-                camera.lookAt(car.position.x, car.position.y + 1.4, car.position.z);
-            }
-
-            // ===== Loop =====
-            let lastTime = performance.now();
-            function animate(now) {
-                requestAnimationFrame(animate);
-                const delta = (now - lastTime) / 1000;
-                lastTime = now;
-
-                updateCar(delta);
-                updateCamera(delta);
-                updateSmoke(delta);
-
-                renderer.render(scene, camera);
-            }
-            animate(lastTime);
-
-            // Resize
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+        // Hintergrundblöcke
+        const blockColors = [0xff9aa2, 0xffe29f, 0xbaffc9, 0xa0c4ff, 0xd4b5ff];
+        const blockGeo = new THREE.BoxGeometry(16, 18, 12);
+        for (let i = 0; i < 18; i++) {
+            const mat = new THREE.MeshStandardMaterial({
+                color: blockColors[i % blockColors.length],
+                roughness: 1,
+                flatShading: true
             });
-        };
+            const b = new THREE.Mesh(blockGeo, mat);
+            b.castShadow = true;
+            b.receiveShadow = true;
+            const side = Math.random() > 0.5 ? 1 : -1;
+            b.position.set(
+                side * (80 + Math.random() * 80),
+                9,
+                (Math.random() - 0.5) * 260
+            );
+            scene.add(b);
+        }
+
+        function guardrail(x, z, length, rotY) {
+            const g = new THREE.Mesh(
+                new THREE.BoxGeometry(length, 1.2, 0.4),
+                new THREE.MeshStandardMaterial({
+                    color: 0xe5e5e5,
+                    roughness: 0.7,
+                    flatShading: true
+                })
+            );
+            g.position.set(x, 0.9, z);
+            g.rotation.y = rotY;
+            g.castShadow = true;
+            scene.add(g);
+        }
+        guardrail(0, 86, 70, 0);
+        guardrail(0, -86, 70, 0);
+        guardrail(50, 0, 160, Math.PI / 2);
+        guardrail(-50, 0, 160, Math.PI / 2);
+
+        // ===== CLS-Modell laden =====
+        let car = null;
+        let carReady = false;
+
+        const loader = new GLTFLoader();
+        loader.load(
+            'mersedes_cls63.glb',
+            (gltf) => {
+                car = gltf.scene;
+                car.traverse(obj => {
+                    if (obj.isMesh) {
+                        obj.castShadow = true;
+                        obj.receiveShadow = true;
+                        if (obj.material) {
+                            obj.material.flatShading = true;
+                            obj.material.needsUpdate = true;
+                        }
+                    }
+                });
+
+                // ggf. anpassen: Scale / Rotation hängt vom Modell ab
+                car.scale.set(1, 1, 1);
+                car.rotation.y = Math.PI; // falls er rückwärts schaut, hier spielen ;)
+                car.position.set(0, 0, -30);
+
+                scene.add(car);
+                carReady = true;
+            },
+            undefined,
+            (err) => console.error('Fehler beim Laden des Modells', err)
+        );
+
+        // ===== Steuerung & Drift-Physik =====
+        const keys = {};
+        document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        let velocity = new THREE.Vector3(0, 0, 0);
+        let carAngle = 0;
+
+        const accel = 0.11;
+        const brake = 0.16;
+        const maxSpeed = 3.2;
+        const baseFriction = 0.96;
+        const gripSideFriction = 0.91;
+        const driftSideFriction = 0.985;
+        const turnFactor = 0.09;
+
+        // ===== Reifenspuren =====
+        const skidSegments = [];
+        let skidIndex = 0;
+        const maxSkids = 350;
+
+        function spawnSkidAt(pos, angle) {
+            let seg;
+            if (skidSegments.length < maxSkids) {
+                const geo = new THREE.PlaneGeometry(1.2, 0.25);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                    transparent: true,
+                    opacity: 0.55
+                });
+                seg = new THREE.Mesh(geo, mat);
+                seg.rotation.x = -Math.PI / 2;
+                seg.position.y = 0.031;
+                scene.add(seg);
+                skidSegments.push(seg);
+            } else {
+                seg = skidSegments[skidIndex];
+                skidIndex = (skidIndex + 1) % maxSkids;
+            }
+            seg.position.x = pos.x;
+            seg.position.z = pos.z;
+            seg.rotation.y = angle;
+        }
+
+        // ===== Rauch =====
+        const smokeParticles = [];
+        const smokeTexture = createSmokeTexture();
+
+        function createSmokeTexture() {
+            const size = 64;
+            const c = document.createElement('canvas');
+            c.width = c.height = size;
+            const ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(
+                size / 2, size / 2, 5,
+                size / 2, size / 2, size / 2
+            );
+            g.addColorStop(0, 'rgba(255,255,255,0.8)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, size, size);
+            return new THREE.CanvasTexture(c);
+        }
+
+        function spawnSmokeAt(pos) {
+            const mat = new THREE.SpriteMaterial({
+                map: smokeTexture,
+                transparent: true,
+                opacity: 0.7,
+                depthWrite: false
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.copy(pos);
+            sprite.position.y += 0.3;
+            sprite.scale.set(1.3, 1.3, 1.3);
+            sprite.userData.life = 0.8;
+            smokeParticles.push(sprite);
+            scene.add(sprite);
+        }
+
+        function updateSmoke(delta) {
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const s = smokeParticles[i];
+                s.userData.life -= delta;
+                if (s.userData.life <= 0) {
+                    scene.remove(s);
+                    smokeParticles.splice(i, 1);
+                } else {
+                    s.position.y += delta * 0.7;
+                    s.material.opacity = s.userData.life / 0.8;
+                    const scale = 1.3 + (0.8 - s.userData.life) * 1.2;
+                    s.scale.set(scale, scale, scale);
+                }
+            }
+        }
+
+        // ===== Car-Update =====
+        function updateCar(delta) {
+            if (!carReady) return;
+
+            const forward = keys['w'] || keys['arrowup'];
+            const back = keys['s'] || keys['arrowdown'];
+            const left = keys['a'] || keys['arrowleft'];
+            const right = keys['d'] || keys['arrowright'];
+            const handbrake = keys[' '];
+
+            const quat = new THREE.Quaternion();
+            quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
+
+            const invQuat = quat.clone().invert();
+            const localVel = velocity.clone().applyQuaternion(invQuat);
+
+            const factor = delta * 60;
+
+            if (forward) localVel.z -= accel * factor;
+            if (back) localVel.z += brake * factor * 0.7;
+
+            const speed = Math.abs(localVel.z);
+            if (speed > maxSpeed) {
+                localVel.z = Math.sign(localVel.z) * maxSpeed;
+            }
+
+            let steer = 0;
+            if (left) steer += 1;
+            if (right) steer -= 1;
+            const steerStrength = Math.min(1, speed / (maxSpeed * 0.5));
+            carAngle += steer * turnFactor * steerStrength;
+
+            const sideFriction = handbrake ? driftSideFriction : gripSideFriction;
+            localVel.x *= sideFriction;
+            localVel.z *= baseFriction;
+
+            velocity.copy(localVel).applyQuaternion(quat);
+            car.position.add(velocity);
+            car.position.y = 0;
+
+            car.rotation.y = carAngle + Math.PI;
+            car.rotation.z = -steer * steerStrength * 0.12;
+
+            const rearOffsetLeft = new THREE.Vector3(-1.2, 0, -2.2);
+            const rearOffsetRight = new THREE.Vector3(1.2, 0, -2.2);
+            const rearLeftWorld = rearOffsetLeft.clone().applyQuaternion(quat).add(car.position);
+            const rearRightWorld = rearOffsetRight.clone().applyQuaternion(quat).add(car.position);
+
+            const sidewaysSpeed = Math.abs(localVel.x);
+            const drifting = (sidewaysSpeed > 0.25 && speed > 0.6) || handbrake;
+
+            if (drifting) {
+                spawnSkidAt(rearLeftWorld, carAngle);
+                spawnSkidAt(rearRightWorld, carAngle);
+                spawnSmokeAt(rearLeftWorld);
+                spawnSmokeAt(rearRightWorld);
+            }
+        }
+
+        // ===== Kamera =====
+        const cameraTargetPos = new THREE.Vector3();
+        function updateCamera(delta) {
+            if (!carReady) return;
+            const offset = new THREE.Vector3(0, 4, 11);
+            const quat = new THREE.Quaternion();
+            quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), carAngle);
+            const worldOffset = offset.applyQuaternion(quat);
+            cameraTargetPos.copy(car.position).add(worldOffset);
+            camera.position.lerp(cameraTargetPos, 0.08);
+            camera.lookAt(car.position.x, car.position.y + 1.4, car.position.z);
+        }
+
+        // ===== Loop =====
+        let lastTime = performance.now();
+        function animate(now) {
+            requestAnimationFrame(animate);
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+
+            updateCar(delta);
+            updateCamera(delta);
+            updateSmoke(delta);
+
+            renderer.render(scene, camera);
+        }
+        animate(lastTime);
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
