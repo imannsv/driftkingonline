@@ -113,10 +113,10 @@
         const TRACK = {
             cx: 0,
             cy: 0,
-            halfWidth: 1400,   // größer
+            halfWidth: 1400,
             halfHeight: 900
         };
-        const TRACK_MARGIN = 40;  // innerer Rand
+        const TRACK_MARGIN = 40;
         const WORLD_MARGIN = 600;
 
         function isOnTrack(x, y) {
@@ -136,32 +136,42 @@
         };
 
         // =========================
-        // Hindernisse
+        // Hindernisse (Hütchen)
         // =========================
         const obstacles = []; // {x,y,radius}
 
-        function addObstacle(x, y, radius = 25) {
+        function addObstacle(x, y, radius = 18) {
             obstacles.push({ x, y, radius });
         }
 
         function initObstacles() {
             obstacles.length = 0;
 
-            // Ein paar Pylonen an den Geraden
-            for (let x = -1200; x <= 1200; x += 200) {
-                addObstacle(x, TRACK.cy - TRACK.halfHeight + 200, 22);
-                addObstacle(x, TRACK.cy + TRACK.halfHeight - 200, 22);
+            const innerLeft = TRACK.cx - TRACK.halfWidth + TRACK_MARGIN + 80;
+            const innerRight = TRACK.cx + TRACK.halfWidth - TRACK_MARGIN - 80;
+            const innerTop = TRACK.cy - TRACK.halfHeight + TRACK_MARGIN + 80;
+            const innerBottom = TRACK.cy + TRACK.halfHeight - TRACK_MARGIN - 80;
+
+            // ein paar „geordnetere“ Reihen an den Rändern
+            for (let x = innerLeft; x <= innerRight; x += 260) {
+                addObstacle(x, innerTop + 80, 20);
+                addObstacle(x, innerBottom - 80, 20);
             }
 
-            // Innen im Rechteck „Inseln“
-            addObstacle(-400, -200, 35);
-            addObstacle(350, -250, 35);
-            addObstacle(-250, 260, 35);
-            addObstacle(420, 280, 35);
+            // random Hütchen im inneren Bereich
+            const spawnPos = { x: TRACK.cx, y: TRACK.cy + TRACK.halfHeight - 120 };
+            const minDistToSpawn = 260;
 
-            // kleine Slalom-Reihe
-            for (let i = -3; i <= 3; i++) {
-                addObstacle(i * 140, 0, 18);
+            for (let i = 0; i < 35; i++) {
+                const rx = innerLeft + Math.random() * (innerRight - innerLeft);
+                const ry = innerTop + Math.random() * (innerBottom - innerTop);
+
+                const dx = rx - spawnPos.x;
+                const dy = ry - spawnPos.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < minDistToSpawn) continue; // nicht direkt am Start
+
+                addObstacle(rx, ry, 18 + Math.random() * 4);
             }
         }
 
@@ -193,10 +203,10 @@
         };
 
         function setCarToSpawn() {
-            // Start unten mittig im Rechteck, Richtung nach oben
+            // Start unten mittig, Richtung nach oben
             car.x = TRACK.cx;
             car.y = TRACK.cy + TRACK.halfHeight - 120;
-            car.angle = -Math.PI / 2;
+            car.angle = -Math.PI / 2; // nach oben bezogen auf die Karte
             car.vx = 0;
             car.vy = 0;
         }
@@ -303,7 +313,7 @@
             if (car.y < -limit) car.y = -limit;
             if (car.y > limit) car.y = limit;
 
-            // Kollision mit Hindernissen
+            // Kollision mit Hütchen (leichter Bounce)
             const carRadius = car.length * 0.35;
             for (const o of obstacles) {
                 const dx = car.x - o.x;
@@ -315,17 +325,17 @@
                     const nx = dx / dist;
                     const ny = dy / dist;
 
-                    // Auto aus dem Hindernis herausschieben
-                    car.x += nx * overlap;
-                    car.y += ny * overlap;
+                    // Auto leicht aus dem Hütchen rausschieben
+                    car.x += nx * overlap * 0.6;
+                    car.y += ny * overlap * 0.6;
 
-                    // Geschwindigkeit etwas zurückprallen lassen
+                    // Velocity spiegeln + dämpfen (leichter Bounce)
                     const dot = car.vx * nx + car.vy * ny;
-                    car.vx -= 1.4 * dot * nx;
-                    car.vy -= 1.4 * dot * ny;
+                    car.vx -= 1.0 * dot * nx;
+                    car.vy -= 1.0 * dot * ny;
 
-                    car.vx *= 0.4;
-                    car.vy *= 0.4;
+                    car.vx *= 0.65;
+                    car.vy *= 0.65;
                 }
             }
 
@@ -365,10 +375,11 @@
         // Rendering
         // =========================
 
+        // Y hier extra "gedreht" -> Map wirkt nicht mehr gespiegelt
         function worldToScreen(wx, wy, camX, camY) {
             return {
                 x: canvas.width / 2 + (wx - camX),
-                y: canvas.height / 2 + (wy - camY)
+                y: canvas.height / 2 - (wy - camY)
             };
         }
 
@@ -418,13 +429,12 @@
                 }
             }
 
-            // vier Seiten der inneren Curbs
-            drawCurbSide(-curbW / 2, -curbH / 2, curbW / 2, -curbH / 2, false); // oben
-            drawCurbSide(curbW / 2, -curbH / 2, curbW / 2, curbH / 2, true);  // rechts
-            drawCurbSide(curbW / 2, curbH / 2, -curbW / 2, curbH / 2, false); // unten
-            drawCurbSide(-curbW / 2, curbH / 2, -curbW / 2, -curbH / 2, true);  // links
+            drawCurbSide(-curbW / 2, -curbH / 2, curbW / 2, -curbH / 2, false);
+            drawCurbSide(curbW / 2, -curbH / 2, curbW / 2, curbH / 2, true);
+            drawCurbSide(curbW / 2, curbH / 2, -curbW / 2, curbH / 2, false);
+            drawCurbSide(-curbW / 2, curbH / 2, -curbW / 2, -curbH / 2, true);
 
-            // Mittellinien (zwei Kreuz-Fahrspuren)
+            // Mittellinien
             ctx.strokeStyle = "rgba(255,255,255,0.35)";
             ctx.lineWidth = 3;
             ctx.setLineDash([16, 18]);
@@ -449,16 +459,41 @@
                 ctx.save();
                 ctx.translate(p.x, p.y);
 
-                // kleine „Pylonen“
-                const gradient = ctx.createRadialGradient(0, 0, 4, 0, 0, o.radius);
-                gradient.addColorStop(0, "#ffb84d");
-                gradient.addColorStop(0.5, "#ff7a00");
-                gradient.addColorStop(1, "#5a2400");
-
-                ctx.fillStyle = gradient;
+                // Hütchen-Schatten
+                ctx.fillStyle = "rgba(0,0,0,0.45)";
                 ctx.beginPath();
-                ctx.arc(0, 0, o.radius, 0, Math.PI * 2);
+                ctx.ellipse(0, 6, o.radius * 0.9, o.radius * 0.5, 0, 0, Math.PI * 2);
                 ctx.fill();
+
+                // Hütchen-Körper
+                const h = o.radius * 1.7;
+                const r = o.radius * 0.7;
+
+                const grad = ctx.createLinearGradient(0, -h, 0, 0);
+                grad.addColorStop(0, "#ffd08a");
+                grad.addColorStop(0.4, "#ff8f2a");
+                grad.addColorStop(1, "#b34500");
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(0, -h);          // Spitze
+                ctx.lineTo(r, 0);
+                ctx.lineTo(-r, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // weiße Streifen
+                ctx.strokeStyle = "rgba(255,255,255,0.9)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.8, -h * 0.45);
+                ctx.lineTo(r * 0.8, -h * 0.45);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.6, -h * 0.2);
+                ctx.lineTo(r * 0.6, -h * 0.2);
+                ctx.stroke();
 
                 ctx.restore();
             }
@@ -468,7 +503,7 @@
             const camX = car.x;
             const camY = car.y;
 
-            // Hintergrund (Wiese / Stadtboden)
+            // Hintergrund
             ctx.fillStyle = "#133018";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -619,11 +654,10 @@
             ctx.save();
             ctx.translate(x0, y0);
 
-            // Rahmen-Hintergrund
+            // Hintergrund
             ctx.fillStyle = "rgba(0,0,0,0.75)";
             ctx.fillRect(0, 0, miniSize, miniSize);
 
-            // leichter Rand
             ctx.strokeStyle = "rgba(255,255,255,0.9)";
             ctx.lineWidth = 2;
             ctx.strokeRect(0, 0, miniSize, miniSize);
@@ -637,7 +671,7 @@
                 };
             }
 
-            // Track-Rechteck
+            // Track
             const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
             const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
 
@@ -657,7 +691,7 @@
                 ctx.fill();
             }
 
-            // Auto als kleiner Pfeil
+            // Auto-Pfeil
             const carMini = worldToMini(car.x, car.y);
             ctx.save();
             ctx.translate(carMini.x, carMini.y);
