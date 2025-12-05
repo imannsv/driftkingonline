@@ -64,6 +64,7 @@
         <div>Speed: <span id="speedText">0</span> km/h</div>
         <div>Drift: <span id="driftText">0</span>%</div>
         <div>Drift Punkte: <span id="driftScoreText">0</span></div>
+        <div>Collects: <span id="pickupScoreText">0</span></div>
         <div id="offText" style="margin-top:4px; color:#ff7070; display:none;">OFF TRACK - Respawn</div>
         <div id="driftZoneLabel">🔥 DRIFT ZONE ACTIVE</div>
     </div>
@@ -84,6 +85,7 @@
         const speedText = document.getElementById('speedText');
         const driftText = document.getElementById('driftText');
         const driftScoreText = document.getElementById('driftScoreText');
+        const pickupScoreText = document.getElementById('pickupScoreText');
         const offText = document.getElementById('offText');
         const driftZoneLabel = document.getElementById('driftZoneLabel');
 
@@ -120,8 +122,6 @@
 
         // =========================
         // Track: große rechteckige Fläche
-        // Koordinaten: x rechts, y nach unten
-        // Winkel 0 = Auto zeigt nach OBEN (y-)
         // =========================
         const TRACK = {
             cx: 0,
@@ -152,14 +152,12 @@
         // Drift Zonen (Rechtecke)
         // =========================
         const driftZones = [
-            // Linke Mitte – großer Sweeper
             {
                 x: TRACK.cx - 900,
                 y: TRACK.cy - 200,
                 w: 650,
                 h: 300
             },
-            // Rechte Unterseite – lange Driftgerade / Kurve
             {
                 x: TRACK.cx + 250,
                 y: TRACK.cy + 200,
@@ -223,6 +221,54 @@
         }
 
         // =========================
+        // Collectibles (Punkte zum Sammeln)
+        // =========================
+        const pickups = []; // {x,y,radius}
+        let pickupScore = 0;
+        const PICKUP_COUNT = 7;
+
+        function randomPointInsideTrack() {
+            const x = TRACK.cx - TRACK.halfWidth + TRACK_MARGIN + 60 +
+                Math.random() * (TRACK.halfWidth * 2 - 2 * (TRACK_MARGIN + 60));
+            const y = TRACK.cy - TRACK.halfHeight + TRACK_MARGIN + 60 +
+                Math.random() * (TRACK.halfHeight * 2 - 2 * (TRACK_MARGIN + 60));
+            return { x, y };
+        }
+
+        function respawnPickup(pickup) {
+            let tries = 0;
+            while (tries < 50) {
+                const p = randomPointInsideTrack();
+                let tooCloseToObstacles = false;
+                for (const o of obstacles) {
+                    const d = Math.hypot(p.x - o.x, p.y - o.y);
+                    if (d < o.radius + 40) {
+                        tooCloseToObstacles = true;
+                        break;
+                    }
+                }
+                if (!tooCloseToObstacles) {
+                    pickup.x = p.x;
+                    pickup.y = p.y;
+                    return;
+                }
+                tries++;
+            }
+        }
+
+        function initPickups() {
+            pickups.length = 0;
+            for (let i = 0; i < PICKUP_COUNT; i++) {
+                const p = randomPointInsideTrack();
+                pickups.push({
+                    x: p.x,
+                    y: p.y,
+                    radius: 18
+                });
+            }
+        }
+
+        // =========================
         // Car-Physik
         // =========================
         const car = {
@@ -236,7 +282,7 @@
             maxSpeed: 220,
             acceleration: 290,
             brake: 180,
-            friction: 3.0,     // etwas mehr Rollwiderstand
+            friction: 3.0,
             grip: 7,
             handbrakeGrip: 2.2,
             steering: 220      // Grad/Sek bei Voll-Lenken
@@ -250,10 +296,9 @@
         };
 
         function setCarToSpawn() {
-            // Start unten mittig, Richtung nach oben in die Fläche rein
             car.x = TRACK.cx;
             car.y = TRACK.cy + TRACK.halfHeight - 120;
-            car.angle = 0;       // zeigt nach oben
+            car.angle = 0;
             car.vx = 0;
             car.vy = 0;
         }
@@ -274,8 +319,10 @@
 
         resetCar();
         initObstacles();
+        initPickups();
 
-        const skidmarks = [];
+        // Skidmarks: jetzt pro Rad, mit Winkel
+        const skidmarks = []; // {x,y,angle,alpha,life}
 
         function triggerAutoRespawn() {
             respawn.active = true;
@@ -312,14 +359,14 @@
             }
 
             // Vorwärtsrichtung (0 = nach oben)
-            const fx = Math.sin(car.angle);   // x-Komponente vorwärts
-            const fy = -Math.cos(car.angle);  // y-Komponente vorwärts (oben = negativ)
+            const fx = Math.sin(car.angle);
+            const fy = -Math.cos(car.angle);
 
             // Seitwärtsrichtung (rechts)
             const sx = Math.cos(car.angle);
             const sy = Math.sin(car.angle);
 
-            // Geschwindigkeit in lokale Komponenten zerlegen
+            // Lokale Geschwindigkeitskomponenten
             const forwardSpeed = car.vx * fx + car.vy * fy;
             const sideSpeed = car.vx * sx + car.vy * sy;
 
@@ -333,7 +380,7 @@
 
             let newForward = forwardSpeed + accel * dt;
 
-            // Motorbremse, wenn weder W noch S gedrückt sind
+            // Motorbremse
             if (!keys.w && !keys.s) {
                 const engineBrake = car.acceleration * 0.8 * dt;
                 if (newForward > 0) {
@@ -349,15 +396,13 @@
             if (newForward > maxFwd) newForward = maxFwd;
             if (newForward < maxBack) newForward = maxBack;
 
-            // Grip / Handbremse auf Seitwärtsanteil
             const grip = keys.space ? car.handbrakeGrip : car.grip;
             const newSide = sideSpeed * Math.exp(-grip * dt);
 
-            // Lokale Komponenten zurück in Weltgeschwindigkeit
+            // zurück in Welt-Geschwindigkeit
             let vx = fx * newForward + sx * newSide;
             let vy = fy * newForward + sy * newSide;
 
-            // Reibung
             const speed = Math.hypot(vx, vy);
             if (speed > 0) {
                 const frictionForce = car.friction * dt;
@@ -370,7 +415,7 @@
             car.vx = vx;
             car.vy = vy;
 
-            // Lenken: A = links, D = rechts
+            // Lenken
             const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
             if (steerInput !== 0 && speed > 1) {
                 const speedFactor = Math.max(speed / car.maxSpeed, 0.3);
@@ -378,18 +423,18 @@
                 car.angle += steerAmount;
             }
 
-            // Position updaten
+            // Position
             car.x += car.vx * dt;
             car.y += car.vy * dt;
 
-            // Hard-Limit Welt
+            // Weltbegrenzung (Fallback)
             const limit = 2000 + WORLD_MARGIN;
             if (car.x < -limit) car.x = -limit;
             if (car.x > limit) car.x = limit;
             if (car.y < -limit) car.y = -limit;
             if (car.y > limit) car.y = limit;
 
-            // Kollision mit Hütchen (sichtbarer Bounce)
+            // Kollision mit Hütchen (Bounce)
             const carRadius = car.length * 0.35;
             for (const o of obstacles) {
                 const dx = car.x - o.x;
@@ -401,43 +446,67 @@
                     const nx = dx / dist;
                     const ny = dy / dist;
 
-                    // kräftiger aus dem Hütchen rausschieben
                     car.x += nx * overlap * 1.0;
                     car.y += ny * overlap * 1.0;
 
-                    // Bounce: Geschwindigkeit reflektieren & dämpfen
                     const dot = car.vx * nx + car.vy * ny;
                     car.vx = (car.vx - 2 * dot * nx) * 0.7;
                     car.vy = (car.vy - 2 * dot * ny) * 0.7;
 
-                    // kleiner Dreher
                     car.angle += (Math.random() - 0.5) * 0.15;
                 }
             }
 
-            // Drift / Skidmarks
+            // Collectibles einsammeln
+            for (const p of pickups) {
+                const dx = car.x - p.x;
+                const dy = car.y - p.y;
+                const dist = Math.hypot(dx, dy);
+                const pickupRadius = p.radius + 20; // etwas Toleranz
+                if (dist < pickupRadius) {
+                    pickupScore++;
+                    pickupScoreText.textContent = pickupScore.toString();
+                    respawnPickup(p);
+                }
+            }
+
+            // Drift / Skidmarks (pro Rad)
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
             if (driftStrength > 0.25 && speed > 5) {
-                const rearOffset = car.length * 0.45;
-                const wx = car.x - fx * rearOffset;
-                const wy = car.y - fy * rearOffset;
-                skidmarks.push({
-                    x: wx,
-                    y: wy,
-                    alpha: 0.6 + 0.4 * driftStrength,
-                    life: 2.0
-                });
+                const halfL = car.length * 0.5;
+                const halfW = car.width * 0.5;
+
+                const frontOffset = halfL * 0.7;
+                const rearOffset = -halfL * 0.7;
+                const sideOffset = halfW * 0.7;
+
+                function addWheelMark(longitudinal, lateral) {
+                    const wx = car.x + fx * longitudinal + sx * lateral;
+                    const wy = car.y + fy * longitudinal + sy * lateral;
+                    skidmarks.push({
+                        x: wx,
+                        y: wy,
+                        angle: car.angle,
+                        alpha: 0.4 + 0.4 * driftStrength,
+                        life: 2.0
+                    });
+                }
+
+                // vier Räder
+                addWheelMark(rearOffset, -sideOffset); // hinten links
+                addWheelMark(rearOffset, sideOffset); // hinten rechts
+                addWheelMark(frontOffset, -sideOffset); // vorne links
+                addWheelMark(frontOffset, sideOffset); // vorne rechts
             }
 
             const kmh = Math.round(speed * 2.6);
             speedText.textContent = kmh.toString();
             driftText.textContent = Math.round(driftStrength * 100);
 
-            // Drift Zonen Punkte
             const inZone = isInDriftZone(car.x, car.y) && isOnTrack(car.x, car.y);
             if (inZone && driftStrength > 0.3 && speed > 15) {
                 driftZoneLabel.style.display = 'block';
-                driftScore += driftStrength * speed * dt * 4; // Multiplikator
+                driftScore += driftStrength * speed * dt * 4;
             } else {
                 driftZoneLabel.style.display = 'none';
             }
@@ -479,17 +548,17 @@
             ctx.save();
             ctx.translate(screen.x, screen.y);
 
-            // Asphalt-Fläche
+            // Asphalt
             ctx.fillStyle = "#2b2f38";
             roundedRect(ctx, -w / 2, -h / 2, w, h, 40);
             ctx.fill();
 
-            // weiße Außenlinie
+            // Außenlinie
             ctx.lineWidth = 14;
             ctx.strokeStyle = "#f5f5f5";
             ctx.stroke();
 
-            // Drift Zonen innerhalb des Tracks (halbtransparent)
+            // Drift Zonen
             for (const z of driftZones) {
                 ctx.save();
                 ctx.globalAlpha = 0.25;
@@ -499,7 +568,6 @@
                 ctx.fillRect(zx, zy, z.w, z.h);
                 ctx.restore();
 
-                // Rand
                 ctx.save();
                 ctx.strokeStyle = "rgba(180,160,255,0.7)";
                 ctx.lineWidth = 3;
@@ -508,7 +576,7 @@
                 ctx.restore();
             }
 
-            // Curbs innen (rot/weiß gestrichelt)
+            // Curbs innen
             const innerMargin = 22;
             const curbW = w - innerMargin * 2;
             const curbH = h - innerMargin * 2;
@@ -543,12 +611,12 @@
             ctx.lineWidth = 3;
             ctx.setLineDash([16, 18]);
 
-            ctx.beginPath(); // vertikal
+            ctx.beginPath();
             ctx.moveTo(0, -h / 2 + 40);
             ctx.lineTo(0, h / 2 - 40);
             ctx.stroke();
 
-            ctx.beginPath(); // horizontal
+            ctx.beginPath();
             ctx.moveTo(-w / 2 + 40, 0);
             ctx.lineTo(w / 2 - 40, 0);
             ctx.stroke();
@@ -563,13 +631,13 @@
                 ctx.save();
                 ctx.translate(p.x, p.y);
 
-                // Hütchen-Schatten
+                // Schatten
                 ctx.fillStyle = "rgba(0,0,0,0.45)";
                 ctx.beginPath();
                 ctx.ellipse(0, 6, o.radius * 0.9, o.radius * 0.5, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Hütchen-Körper (Kegel)
+                // Kegel
                 const h = o.radius * 1.7;
                 const r = o.radius * 0.7;
 
@@ -586,7 +654,6 @@
                 ctx.closePath();
                 ctx.fill();
 
-                // weiße Streifen
                 ctx.strokeStyle = "rgba(255,255,255,0.9)";
                 ctx.lineWidth = 2;
                 ctx.beginPath();
@@ -603,15 +670,47 @@
             }
         }
 
+        function drawPickups(camX, camY) {
+            for (const p of pickups) {
+                const s = worldToScreen(p.x, p.y, camX, camY);
+                ctx.save();
+                ctx.translate(s.x, s.y);
+
+                // Glow
+                const rad = p.radius;
+                const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, rad + 10);
+                grad.addColorStop(0, "rgba(255,255,180,0.9)");
+                grad.addColorStop(0.4, "rgba(255,230,120,0.7)");
+                grad.addColorStop(1, "rgba(255,200,80,0.0)");
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, rad + 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Kern (Coin)
+                ctx.fillStyle = "#ffe76a";
+                ctx.beginPath();
+                ctx.arc(0, 0, rad * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = "#ffcf40";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, rad * 0.5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
         function draw(dt) {
             const camX = car.x;
             const camY = car.y;
 
-            // Hintergrund
             ctx.fillStyle = "#133018";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // leichte Struktur
+            // Struktur
             ctx.save();
             ctx.globalAlpha = 0.18;
             const sz = 240;
@@ -631,16 +730,17 @@
 
             drawTrack(camX, camY);
             drawObstacles(camX, camY);
+            drawPickups(camX, camY);
 
-            // Skidmarks
+            // Skidmarks (dünne Linien pro Rad)
             for (const s of skidmarks) {
-                const screen = worldToScreen(s.x, s.y, camX, camY);
+                const pos = worldToScreen(s.x, s.y, camX, camY);
                 ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.rotate(s.angle);
                 ctx.globalAlpha = Math.max(s.alpha * (s.life / 2.0), 0);
                 ctx.fillStyle = "#000";
-                ctx.beginPath();
-                ctx.ellipse(screen.x, screen.y, 6, 2.5, 0, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillRect(-1, -6, 2, 12); // dünne Spur längs
                 ctx.restore();
             }
 
@@ -650,7 +750,7 @@
             if (respawn.visible) {
                 ctx.save();
                 ctx.translate(carScreen.x, carScreen.y);
-                ctx.rotate(car.angle);   // angle 0 = nach oben
+                ctx.rotate(car.angle);
 
                 // Schatten
                 ctx.save();
@@ -681,7 +781,7 @@
                 roundedRect(ctx, -car.width * 0.32, car.length * 0.05, car.width * 0.64, car.length * 0.18, 6);
                 ctx.fill();
 
-                // Motorhaube (oben) & Heck (unten)
+                // Motorhaube & Heck
                 ctx.fillStyle = "#c00000";
                 roundedRect(ctx, -car.width * 0.45, -car.length * 0.5, car.width * 0.9, car.length * 0.23, 8);
                 ctx.fill();
@@ -689,7 +789,7 @@
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
-                // Scheinwerfer (oben, Front)
+                // Scheinwerfer
                 ctx.fillStyle = "#ffe9b0";
                 ctx.fillRect(-car.width * 0.4, -car.length * 0.5 - 1, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, -car.length * 0.5 - 1, car.width * 0.3, 4);
@@ -758,7 +858,6 @@
             ctx.save();
             ctx.translate(x0, y0);
 
-            // Hintergrund
             ctx.fillStyle = "rgba(0,0,0,0.75)";
             ctx.fillRect(0, 0, miniSize, miniSize);
 
@@ -775,7 +874,7 @@
                 };
             }
 
-            // Track-Rechteck
+            // Track
             const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
             const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
 
@@ -806,11 +905,20 @@
                 ctx.fill();
             }
 
+            // Pickups
+            for (const p of pickups) {
+                const mp = worldToMini(p.x, p.y);
+                ctx.fillStyle = "#ffe76a";
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
             // Auto-Pfeil
             const carMini = worldToMini(car.x, car.y);
             ctx.save();
             ctx.translate(carMini.x, carMini.y);
-            ctx.rotate(car.angle); // gleiches Winkel-System
+            ctx.rotate(car.angle);
             ctx.fillStyle = "#ff4444";
             ctx.beginPath();
             ctx.moveTo(0, -6);
@@ -820,7 +928,6 @@
             ctx.fill();
             ctx.restore();
 
-            // Label
             ctx.fillStyle = "#ffffff";
             ctx.font = "10px Arial";
             ctx.textAlign = "left";
