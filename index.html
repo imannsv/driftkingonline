@@ -34,6 +34,13 @@
             color: #ffd54a;
         }
 
+        #driftZoneLabel {
+            margin-top: 4px;
+            color: #8cf5ff;
+            font-weight: 700;
+            display: none;
+        }
+
         #controls {
             position: absolute;
             bottom: 15px;
@@ -56,7 +63,9 @@
         <div id="hud-title">2D DRIFT CIRCUIT</div>
         <div>Speed: <span id="speedText">0</span> km/h</div>
         <div>Drift: <span id="driftText">0</span>%</div>
+        <div>Drift Punkte: <span id="driftScoreText">0</span></div>
         <div id="offText" style="margin-top:4px; color:#ff7070; display:none;">OFF TRACK - Respawn</div>
+        <div id="driftZoneLabel">🔥 DRIFT ZONE ACTIVE</div>
     </div>
 
     <div id="controls">
@@ -74,7 +83,9 @@
 
         const speedText = document.getElementById('speedText');
         const driftText = document.getElementById('driftText');
+        const driftScoreText = document.getElementById('driftScoreText');
         const offText = document.getElementById('offText');
+        const driftZoneLabel = document.getElementById('driftZoneLabel');
 
         function resize() {
             canvas.width = window.innerWidth;
@@ -138,6 +149,40 @@
         };
 
         // =========================
+        // Drift Zonen (Rechtecke)
+        // =========================
+        const driftZones = [
+            // Linke Mitte – großer Sweeper
+            {
+                x: TRACK.cx - 900,
+                y: TRACK.cy - 200,
+                w: 650,
+                h: 300
+            },
+            // Rechte Unterseite – lange Driftgerade / Kurve
+            {
+                x: TRACK.cx + 250,
+                y: TRACK.cy + 200,
+                w: 700,
+                h: 350
+            }
+        ];
+
+        function isInDriftZone(x, y) {
+            for (const z of driftZones) {
+                if (
+                    x >= z.x &&
+                    x <= z.x + z.w &&
+                    y >= z.y &&
+                    y <= z.y + z.h
+                ) return true;
+            }
+            return false;
+        }
+
+        let driftScore = 0;
+
+        // =========================
         // Hindernisse (Hütchen)
         // =========================
         const obstacles = []; // {x,y,radius}
@@ -164,7 +209,7 @@
             const spawnPos = { x: TRACK.cx, y: TRACK.cy + TRACK.halfHeight - 120 };
             const minDistToSpawn = 260;
 
-            for (let i = 0; i < 35; i++) {
+            for (let i = 0; i < 40; i++) {
                 const rx = innerLeft + Math.random() * (innerRight - innerLeft);
                 const ry = innerTop + Math.random() * (innerBottom - innerTop);
 
@@ -178,7 +223,7 @@
         }
 
         // =========================
-        // Car-Physik (konsistent neu aufgesetzt)
+        // Car-Physik
         // =========================
         const car = {
             x: 0,
@@ -191,10 +236,10 @@
             maxSpeed: 220,
             acceleration: 290,
             brake: 180,
-            friction: 3.5,   // vorher 2.0
+            friction: 3.0,     // etwas mehr Rollwiderstand
             grip: 7,
             handbrakeGrip: 2.2,
-            steering: 220      // Grad pro Sek bei Voll-Lenken
+            steering: 220      // Grad/Sek bei Voll-Lenken
         };
 
         const respawn = {
@@ -224,6 +269,7 @@
 
         function manualReset() {
             resetCar();
+            driftZoneLabel.style.display = 'none';
         }
 
         resetCar();
@@ -238,6 +284,7 @@
             respawn.visible = true;
             setCarToSpawn();
             offText.style.display = 'block';
+            driftZoneLabel.style.display = 'none';
         }
 
         function updateRespawn(dt) {
@@ -279,26 +326,22 @@
             // Beschleunigen/Bremsen
             let accel = 0;
             if (keys.w) {
-                // Gas geben
                 accel += car.acceleration;
             } else if (keys.s) {
-                // aktiv bremsen
                 accel -= car.brake;
             }
 
-            // Grundupdate
             let newForward = forwardSpeed + accel * dt;
 
-            // Zusätzliche Motorbremse, wenn weder Gas noch Bremse gedrückt werden
+            // Motorbremse, wenn weder W noch S gedrückt sind
             if (!keys.w && !keys.s) {
-                const engineBrake = car.acceleration * 0.8 * dt;  // Stärke der Motorbremse
+                const engineBrake = car.acceleration * 0.8 * dt;
                 if (newForward > 0) {
                     newForward = Math.max(0, newForward - engineBrake);
                 } else if (newForward < 0) {
                     newForward = Math.min(0, newForward + engineBrake);
                 }
             }
-
 
             const maxFwd = car.maxSpeed;
             const maxBack = -car.maxSpeed * 0.5;
@@ -327,8 +370,7 @@
             car.vx = vx;
             car.vy = vy;
 
-            // Lenken: A = links, D = rechts (auf dem Bildschirm)
-            // Links = Winkel NEGATIV (CCW), Rechts = POSITIV (CW)
+            // Lenken: A = links, D = rechts
             const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
             if (steerInput !== 0 && speed > 1) {
                 const speedFactor = Math.max(speed / car.maxSpeed, 0.3);
@@ -340,42 +382,38 @@
             car.x += car.vx * dt;
             car.y += car.vy * dt;
 
-            // Harte Weltbegrenzung (fallback)
+            // Hard-Limit Welt
             const limit = 2000 + WORLD_MARGIN;
             if (car.x < -limit) car.x = -limit;
             if (car.x > limit) car.x = limit;
             if (car.y < -limit) car.y = -limit;
             if (car.y > limit) car.y = limit;
 
-            // Kollision mit Hütchen (leichter Bounce)
+            // Kollision mit Hütchen (sichtbarer Bounce)
             const carRadius = car.length * 0.35;
             for (const o of obstacles) {
                 const dx = car.x - o.x;
                 const dy = car.y - o.y;
                 const dist = Math.hypot(dx, dy);
                 const minDist = carRadius + o.radius;
-
                 if (dist < minDist && dist > 0.0001) {
                     const overlap = minDist - dist;
                     const nx = dx / dist;
                     const ny = dy / dist;
 
-                    // kräftiger aus dem Hütchen rauspushen
+                    // kräftiger aus dem Hütchen rausschieben
                     car.x += nx * overlap * 1.0;
                     car.y += ny * overlap * 1.0;
 
-                    // Bounce: Geschwindigkeit an der Normalen stärker reflektieren
+                    // Bounce: Geschwindigkeit reflektieren & dämpfen
                     const dot = car.vx * nx + car.vy * ny;
-
-                    // 2x reflektieren = starker Abprall von der Oberfläche
                     car.vx = (car.vx - 2 * dot * nx) * 0.7;
                     car.vy = (car.vy - 2 * dot * ny) * 0.7;
 
-                    // minimalen zufälligen Dreher geben, damit es „arcadiger“ wirkt
+                    // kleiner Dreher
                     car.angle += (Math.random() - 0.5) * 0.15;
                 }
             }
-
 
             // Drift / Skidmarks
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
@@ -395,6 +433,16 @@
             speedText.textContent = kmh.toString();
             driftText.textContent = Math.round(driftStrength * 100);
 
+            // Drift Zonen Punkte
+            const inZone = isInDriftZone(car.x, car.y) && isOnTrack(car.x, car.y);
+            if (inZone && driftStrength > 0.3 && speed > 15) {
+                driftZoneLabel.style.display = 'block';
+                driftScore += driftStrength * speed * dt * 4; // Multiplikator
+            } else {
+                driftZoneLabel.style.display = 'none';
+            }
+            driftScoreText.textContent = Math.round(driftScore);
+
             if (!isOnTrack(car.x, car.y)) {
                 triggerAutoRespawn();
             }
@@ -413,7 +461,6 @@
         // Rendering
         // =========================
 
-        // Standard: y nach unten
         function worldToScreen(wx, wy, camX, camY) {
             return {
                 x: canvas.width / 2 + (wx - camX),
@@ -441,6 +488,25 @@
             ctx.lineWidth = 14;
             ctx.strokeStyle = "#f5f5f5";
             ctx.stroke();
+
+            // Drift Zonen innerhalb des Tracks (halbtransparent)
+            for (const z of driftZones) {
+                ctx.save();
+                ctx.globalAlpha = 0.25;
+                ctx.fillStyle = "#6a4dff";
+                const zx = z.x - cx;
+                const zy = z.y - cy;
+                ctx.fillRect(zx, zy, z.w, z.h);
+                ctx.restore();
+
+                // Rand
+                ctx.save();
+                ctx.strokeStyle = "rgba(180,160,255,0.7)";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 6]);
+                ctx.strokeRect(zx, zy, z.w, z.h);
+                ctx.restore();
+            }
 
             // Curbs innen (rot/weiß gestrichelt)
             const innerMargin = 22;
@@ -705,7 +771,7 @@
                 const dy = (wy - MAP_BOUNDS.minY) / hWorld;
                 return {
                     x: dx * miniSize,
-                    y: dy * miniSize       // kein Flip, gleiche Orientierung wie Welt
+                    y: dy * miniSize
                 };
             }
 
@@ -719,6 +785,17 @@
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = 1.5;
             ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+
+            // Drift-Zonen
+            for (const z of driftZones) {
+                const a = worldToMini(z.x, z.y);
+                const b = worldToMini(z.x + z.w, z.y + z.h);
+                ctx.fillStyle = "rgba(140,120,255,0.4)";
+                ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+                ctx.strokeStyle = "rgba(200,190,255,0.9)";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+            }
 
             // Hindernisse
             for (const o of obstacles) {
