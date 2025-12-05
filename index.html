@@ -297,12 +297,17 @@
             }
 
             // A = links, D = rechts
+            // A = links, D = rechts (auf dem Bildschirm)
             const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
+
             if (steerInput !== 0 && speed > 1) {
                 const speedFactor = Math.max(speed / car.maxSpeed, 0.3);
                 const steerAmount = (car.steering * Math.PI / 180) * steerInput * dt * speedFactor;
-                car.angle += steerAmount;
+
+                // Vorzeichen invertieren, weil wir die Y-Achse beim Zeichnen gespiegelt haben
+                car.angle -= steerAmount;
             }
+
 
             car.x += car.vx * dt;
             car.y += car.vy * dt;
