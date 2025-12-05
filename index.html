@@ -109,6 +109,8 @@
 
         // =========================
         // Track: große rechteckige Fläche
+        // Koordinaten: x rechts, y nach unten
+        // Winkel 0 = Auto zeigt nach OBEN (y-)
         // =========================
         const TRACK = {
             cx: 0,
@@ -152,13 +154,13 @@
             const innerTop = TRACK.cy - TRACK.halfHeight + TRACK_MARGIN + 80;
             const innerBottom = TRACK.cy + TRACK.halfHeight - TRACK_MARGIN - 80;
 
-            // ein paar „geordnetere“ Reihen an den Rändern
+            // geordnete Reihen an oberen/unteren Rändern
             for (let x = innerLeft; x <= innerRight; x += 260) {
                 addObstacle(x, innerTop + 80, 20);
                 addObstacle(x, innerBottom - 80, 20);
             }
 
-            // random Hütchen im inneren Bereich
+            // random Hütchen im Inneren
             const spawnPos = { x: TRACK.cx, y: TRACK.cy + TRACK.halfHeight - 120 };
             const minDistToSpawn = 260;
 
@@ -169,19 +171,19 @@
                 const dx = rx - spawnPos.x;
                 const dy = ry - spawnPos.y;
                 const dist = Math.hypot(dx, dy);
-                if (dist < minDistToSpawn) continue; // nicht direkt am Start
+                if (dist < minDistToSpawn) continue;
 
                 addObstacle(rx, ry, 18 + Math.random() * 4);
             }
         }
 
         // =========================
-        // Car-Physik
+        // Car-Physik (konsistent neu aufgesetzt)
         // =========================
         const car = {
             x: 0,
             y: 0,
-            angle: 0,          // Richtung
+            angle: 0,          // 0 = nach oben (y-)
             vx: 0,
             vy: 0,
             width: 28,
@@ -192,7 +194,7 @@
             friction: 2.0,
             grip: 7,
             handbrakeGrip: 2.2,
-            steering: 220
+            steering: 220      // Grad pro Sek bei Voll-Lenken
         };
 
         const respawn = {
@@ -203,10 +205,10 @@
         };
 
         function setCarToSpawn() {
-            // Start unten mittig, Richtung nach oben
+            // Start unten mittig, Richtung nach oben in die Fläche rein
             car.x = TRACK.cx;
             car.y = TRACK.cy + TRACK.halfHeight - 120;
-            car.angle = -Math.PI / 2; // nach oben bezogen auf die Karte
+            car.angle = 0;       // zeigt nach oben
             car.vx = 0;
             car.vy = 0;
         }
@@ -262,56 +264,66 @@
                 return;
             }
 
-            const cos = Math.cos(car.angle);
-            const sin = Math.sin(car.angle);
+            // Vorwärtsrichtung (0 = nach oben)
+            const fx = Math.sin(car.angle);   // x-Komponente vorwärts
+            const fy = -Math.cos(car.angle);  // y-Komponente vorwärts (oben = negativ)
 
-            const forwardSpeed = car.vx * cos + car.vy * sin;
-            const sideSpeed = -car.vx * sin + car.vy * cos;
+            // Seitwärtsrichtung (rechts)
+            const sx = Math.cos(car.angle);
+            const sy = Math.sin(car.angle);
 
+            // Geschwindigkeit in lokale Komponenten zerlegen
+            const forwardSpeed = car.vx * fx + car.vy * fy;
+            const sideSpeed = car.vx * sx + car.vy * sy;
+
+            // Beschleunigen/Bremsen
             let accel = 0;
             if (keys.w) accel += car.acceleration;
             if (keys.s) accel -= car.brake;
 
-            const newForwardSpeed = forwardSpeed + accel * dt;
-            let limitedForward = newForwardSpeed;
+            let newForward = forwardSpeed + accel * dt;
 
             const maxFwd = car.maxSpeed;
             const maxBack = -car.maxSpeed * 0.5;
 
-            if (limitedForward > maxFwd) limitedForward = maxFwd;
-            if (limitedForward < maxBack) limitedForward = maxBack;
+            if (newForward > maxFwd) newForward = maxFwd;
+            if (newForward < maxBack) newForward = maxBack;
 
-            let grip = keys.space ? car.handbrakeGrip : car.grip;
-            const newSideSpeed = sideSpeed * Math.exp(-grip * dt);
+            // Grip / Handbremse auf Seitwärtsanteil
+            const grip = keys.space ? car.handbrakeGrip : car.grip;
+            const newSide = sideSpeed * Math.exp(-grip * dt);
 
-            car.vx = limitedForward * cos - newSideSpeed * sin;
-            car.vy = limitedForward * sin + newSideSpeed * cos;
+            // Lokale Komponenten zurück in Weltgeschwindigkeit
+            let vx = fx * newForward + sx * newSide;
+            let vy = fy * newForward + sy * newSide;
 
-            const speed = Math.hypot(car.vx, car.vy);
+            // Reibung
+            const speed = Math.hypot(vx, vy);
             if (speed > 0) {
                 const frictionForce = car.friction * dt;
                 const newSpeed = Math.max(speed - frictionForce, 0);
                 const scale = newSpeed / speed;
-                car.vx *= scale;
-                car.vy *= scale;
+                vx *= scale;
+                vy *= scale;
             }
 
-            // A = links, D = rechts
-            // A = links, D = rechts (auf dem Bildschirm)
-            const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
+            car.vx = vx;
+            car.vy = vy;
 
+            // Lenken: A = links, D = rechts (auf dem Bildschirm)
+            // Links = Winkel NEGATIV (CCW), Rechts = POSITIV (CW)
+            const steerInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0);
             if (steerInput !== 0 && speed > 1) {
                 const speedFactor = Math.max(speed / car.maxSpeed, 0.3);
                 const steerAmount = (car.steering * Math.PI / 180) * steerInput * dt * speedFactor;
-
-                // Vorzeichen invertieren, weil wir die Y-Achse beim Zeichnen gespiegelt haben
-                car.angle -= steerAmount;
+                car.angle += steerAmount;
             }
 
-
+            // Position updaten
             car.x += car.vx * dt;
             car.y += car.vy * dt;
 
+            // Harte Weltbegrenzung (fallback)
             const limit = 2000 + WORLD_MARGIN;
             if (car.x < -limit) car.x = -limit;
             if (car.x > limit) car.x = limit;
@@ -330,11 +342,11 @@
                     const nx = dx / dist;
                     const ny = dy / dist;
 
-                    // Auto leicht aus dem Hütchen rausschieben
+                    // leicht aus dem Hütchen herausschieben
                     car.x += nx * overlap * 0.6;
                     car.y += ny * overlap * 0.6;
 
-                    // Velocity spiegeln + dämpfen (leichter Bounce)
+                    // Velocity spiegeln & dämpfen (Bounce)
                     const dot = car.vx * nx + car.vy * ny;
                     car.vx -= 1.0 * dot * nx;
                     car.vy -= 1.0 * dot * ny;
@@ -347,9 +359,9 @@
             // Drift / Skidmarks
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
             if (driftStrength > 0.25 && speed > 5) {
-                const rearOffset = -car.length * 0.45;
-                const wx = car.x + rearOffset * cos;
-                const wy = car.y + rearOffset * sin;
+                const rearOffset = car.length * 0.45;
+                const wx = car.x - fx * rearOffset;
+                const wy = car.y - fy * rearOffset;
                 skidmarks.push({
                     x: wx,
                     y: wy,
@@ -380,11 +392,11 @@
         // Rendering
         // =========================
 
-        // Y hier extra "gedreht" -> Map wirkt nicht mehr gespiegelt
+        // Standard: y nach unten
         function worldToScreen(wx, wy, camX, camY) {
             return {
                 x: canvas.width / 2 + (wx - camX),
-                y: canvas.height / 2 - (wy - camY)
+                y: canvas.height / 2 + (wy - camY)
             };
         }
 
@@ -470,7 +482,7 @@
                 ctx.ellipse(0, 6, o.radius * 0.9, o.radius * 0.5, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Hütchen-Körper
+                // Hütchen-Körper (Kegel)
                 const h = o.radius * 1.7;
                 const r = o.radius * 0.7;
 
@@ -481,7 +493,7 @@
 
                 ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.moveTo(0, -h);          // Spitze
+                ctx.moveTo(0, -h);
                 ctx.lineTo(r, 0);
                 ctx.lineTo(-r, 0);
                 ctx.closePath();
@@ -551,7 +563,7 @@
             if (respawn.visible) {
                 ctx.save();
                 ctx.translate(carScreen.x, carScreen.y);
-                ctx.rotate(car.angle + Math.PI / 2);
+                ctx.rotate(car.angle);   // angle 0 = nach oben
 
                 // Schatten
                 ctx.save();
@@ -582,7 +594,7 @@
                 roundedRect(ctx, -car.width * 0.32, car.length * 0.05, car.width * 0.64, car.length * 0.18, 6);
                 ctx.fill();
 
-                // Motorhaube & Heck
+                // Motorhaube (oben) & Heck (unten)
                 ctx.fillStyle = "#c00000";
                 roundedRect(ctx, -car.width * 0.45, -car.length * 0.5, car.width * 0.9, car.length * 0.23, 8);
                 ctx.fill();
@@ -590,7 +602,7 @@
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
-                // Scheinwerfer
+                // Scheinwerfer (oben, Front)
                 ctx.fillStyle = "#ffe9b0";
                 ctx.fillRect(-car.width * 0.4, -car.length * 0.5 - 1, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, -car.length * 0.5 - 1, car.width * 0.3, 4);
@@ -637,8 +649,8 @@
                 headlightCone(-car.width * 0.25);
                 headlightCone(car.width * 0.25);
 
-                ctx.restore();
-                ctx.restore();
+                ctx.restore(); // Licht
+                ctx.restore(); // Auto
             }
 
             drawMinimap();
@@ -672,20 +684,20 @@
                 const dy = (wy - MAP_BOUNDS.minY) / hWorld;
                 return {
                     x: dx * miniSize,
-                    y: miniSize - dy * miniSize
+                    y: dy * miniSize       // kein Flip, gleiche Orientierung wie Welt
                 };
             }
 
-            // Track
+            // Track-Rechteck
             const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
             const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
 
             ctx.fillStyle = "#2b2f38";
-            ctx.fillRect(p1.x, p2.y, p2.x - p1.x, p1.y - p2.y);
+            ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
 
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = 1.5;
-            ctx.strokeRect(p1.x, p2.y, p2.x - p1.x, p1.y - p2.y);
+            ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
 
             // Hindernisse
             for (const o of obstacles) {
@@ -700,7 +712,7 @@
             const carMini = worldToMini(car.x, car.y);
             ctx.save();
             ctx.translate(carMini.x, carMini.y);
-            ctx.rotate(car.angle + Math.PI / 2);
+            ctx.rotate(car.angle); // gleiches Winkel-System
             ctx.fillStyle = "#ff4444";
             ctx.beginPath();
             ctx.moveTo(0, -6);
