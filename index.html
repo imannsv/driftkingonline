@@ -233,19 +233,16 @@
         // =========================
         // Gefährliche / Bonus Zonen
         // =========================
-        // Oil Spots (sehr rutschig)
         const oilSpots = [
             { x: TRACK.cx - 300, y: TRACK.cy - 100, radius: 80 },
             { x: TRACK.cx + 450, y: TRACK.cy, radius: 70 }
         ];
 
-        // Sand / Schotter (langsam, aber leichter Drift)
         const sandZones = [
             { x: TRACK.cx - 500, y: TRACK.cy + 250, w: 450, h: 220 },
             { x: TRACK.cx + 350, y: TRACK.cy - 350, w: 400, h: 180 }
         ];
 
-        // Risk Drift Zone (extra Punkte, nah am Rand)
         const riskZones = [
             { x: TRACK.cx - TRACK.halfWidth + TRACK_MARGIN + 30, y: TRACK.cy - 300, w: 160, h: 600 },
             { x: TRACK.cx + TRACK.halfWidth - TRACK_MARGIN - 190, y: TRACK.cy - 300, w: 160, h: 600 }
@@ -420,7 +417,6 @@
             levelText.textContent = level.toString();
             xpText.textContent = Math.floor(totalXP).toString();
 
-            // Freischalten: alle 2 Level ein besseres Setup bis max
             let unlocked = Math.min(Math.floor((level - 1) / 2), carPresets.length - 1);
             if (unlocked !== currentPresetIndex) {
                 currentPresetIndex = unlocked;
@@ -492,6 +488,9 @@
         const COMBO_DRIFT_THRESHOLD = 0.35;
         const COMBO_DECAY_TIME = 0.7;
         let bestCombo = 1;
+
+        // Driftpunkte hier nach oben verlegt, damit setChallenge() es kennt
+        let driftScore = 0;
 
         function updateCombo(driftStrength, speed, dt) {
             if (driftStrength > COMBO_DRIFT_THRESHOLD && speed > 10) {
@@ -678,8 +677,6 @@
         // =========================
         // Car-Update
         // =========================
-        let driftScore = 0;
-
         function updateCar(dt) {
             if (respawn.active) {
                 car.vx = 0;
@@ -1391,7 +1388,7 @@
 
             drawMinimap();
 
-            // Challenge-Status im HUD updaten
+            // Challenge-Status im HUD
             challengeStatusEl.textContent = "Status: " + (challengeRunning ? "Läuft..." : challengeResult);
 
             requestAnimationFrame(loop);
