@@ -22,8 +22,9 @@
             background: rgba(0, 0, 0, 0.6);
             border-radius: 8px;
             border-left: 4px solid #ff4747;
-            font-size: 14px;
+            font-size: 13px;
             z-index: 10;
+            max-width: 330px;
         }
 
         #hud-title {
@@ -41,6 +42,13 @@
             display: none;
         }
 
+        #perfectRunLabel {
+            margin-top: 2px;
+            color: #ffb347;
+            font-weight: 700;
+            display: none;
+        }
+
         #controls {
             position: absolute;
             bottom: 15px;
@@ -53,6 +61,25 @@
             z-index: 10;
         }
 
+        #challengeBanner {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 8px 14px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            border-right: 4px solid #4af2ff;
+            font-size: 12px;
+            text-align: right;
+            z-index: 10;
+            max-width: 260px;
+        }
+
+        #challengeStatus {
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
         canvas {
             display: block;
         }
@@ -61,19 +88,39 @@
 <body>
     <div id="hud">
         <div id="hud-title">2D DRIFT CIRCUIT</div>
+
         <div>Speed: <span id="speedText">0</span> km/h</div>
-        <div>Drift: <span id="driftText">0</span>%</div>
+        <div>
+            Drift: <span id="driftText">0</span>% &nbsp;|&nbsp;
+            Combo: x<span id="comboText">1</span>
+        </div>
         <div>Drift Punkte: <span id="driftScoreText">0</span></div>
         <div>Collects: <span id="pickupScoreText">0</span></div>
+
+        <div>
+            Level: <span id="levelText">1</span> &nbsp;|&nbsp;
+            XP: <span id="xpText">0</span>
+        </div>
+        <div>Car Setup: <span id="carSetupText">Street</span></div>
+
         <div id="offText" style="margin-top:4px; color:#ff7070; display:none;">OFF TRACK - Respawn</div>
         <div id="driftZoneLabel">🔥 DRIFT ZONE ACTIVE</div>
+        <div id="perfectRunLabel">🎯 PERFECT RUN AKTIV (keine Hütchen hitten!)</div>
+    </div>
+
+    <div id="challengeBanner">
+        <div>Challenge: <span id="challengeName">Freies Fahren</span></div>
+        <div>Ziel: <span id="challengeGoal">–</span></div>
+        <div>Zeit: <span id="challengeTime">00.0</span>s</div>
+        <div id="challengeStatus">Status: –</div>
     </div>
 
     <div id="controls">
         W / S – Gas / Bremse<br>
         A / D – Lenken<br>
         SPACE – Handbremse / mehr Drift<br>
-        R – Reset
+        R – Reset auf Start<br>
+        1–4 – Challenge wählen
     </div>
 
     <canvas id="game"></canvas>
@@ -82,12 +129,23 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
 
+        // HUD-Elemente
         const speedText = document.getElementById('speedText');
         const driftText = document.getElementById('driftText');
         const driftScoreText = document.getElementById('driftScoreText');
         const pickupScoreText = document.getElementById('pickupScoreText');
+        const xpText = document.getElementById('xpText');
+        const levelText = document.getElementById('levelText');
+        const carSetupText = document.getElementById('carSetupText');
         const offText = document.getElementById('offText');
         const driftZoneLabel = document.getElementById('driftZoneLabel');
+        const perfectRunLabel = document.getElementById('perfectRunLabel');
+        const comboText = document.getElementById('comboText');
+
+        const challengeNameEl = document.getElementById('challengeName');
+        const challengeGoalEl = document.getElementById('challengeGoal');
+        const challengeTimeEl = document.getElementById('challengeTime');
+        const challengeStatusEl = document.getElementById('challengeStatus');
 
         function resize() {
             canvas.width = window.innerWidth;
@@ -112,6 +170,11 @@
             if (k in keys) keys[k] = true;
             if (k === ' ') keys.space = true;
             if (k === 'r') manualReset();
+
+            if (k === '1') setChallenge(0);
+            if (k === '2') setChallenge(1);
+            if (k === '3') setChallenge(2);
+            if (k === '4') setChallenge(3);
         });
 
         window.addEventListener('keyup', e => {
@@ -121,7 +184,7 @@
         });
 
         // =========================
-        // Track: große rechteckige Fläche
+        // Track / Welt
         // =========================
         const TRACK = {
             cx: 0,
@@ -149,36 +212,62 @@
         };
 
         // =========================
-        // Drift Zonen (Rechtecke)
+        // Drift Zonen (Bonus)
         // =========================
         const driftZones = [
-            {
-                x: TRACK.cx - 900,
-                y: TRACK.cy - 200,
-                w: 650,
-                h: 300
-            },
-            {
-                x: TRACK.cx + 250,
-                y: TRACK.cy + 200,
-                w: 700,
-                h: 350
-            }
+            { x: TRACK.cx - 900, y: TRACK.cy - 200, w: 650, h: 300 },
+            { x: TRACK.cx + 250, y: TRACK.cy + 200, w: 700, h: 350 }
         ];
+
+        function isInRectZone(x, y, z) {
+            return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+        }
 
         function isInDriftZone(x, y) {
             for (const z of driftZones) {
-                if (
-                    x >= z.x &&
-                    x <= z.x + z.w &&
-                    y >= z.y &&
-                    y <= z.y + z.h
-                ) return true;
+                if (isInRectZone(x, y, z)) return true;
             }
             return false;
         }
 
-        let driftScore = 0;
+        // =========================
+        // Gefährliche / Bonus Zonen
+        // =========================
+        // Oil Spots (sehr rutschig)
+        const oilSpots = [
+            { x: TRACK.cx - 300, y: TRACK.cy - 100, radius: 80 },
+            { x: TRACK.cx + 450, y: TRACK.cy, radius: 70 }
+        ];
+
+        // Sand / Schotter (langsam, aber leichter Drift)
+        const sandZones = [
+            { x: TRACK.cx - 500, y: TRACK.cy + 250, w: 450, h: 220 },
+            { x: TRACK.cx + 350, y: TRACK.cy - 350, w: 400, h: 180 }
+        ];
+
+        // Risk Drift Zone (extra Punkte, nah am Rand)
+        const riskZones = [
+            { x: TRACK.cx - TRACK.halfWidth + TRACK_MARGIN + 30, y: TRACK.cy - 300, w: 160, h: 600 },
+            { x: TRACK.cx + TRACK.halfWidth - TRACK_MARGIN - 190, y: TRACK.cy - 300, w: 160, h: 600 }
+        ];
+
+        function isInCircleZone(x, y, zone) {
+            const dx = x - zone.x;
+            const dy = y - zone.y;
+            return Math.hypot(dx, dy) <= zone.radius;
+        }
+
+        function inOil(x, y) {
+            return oilSpots.some(z => isInCircleZone(x, y, z));
+        }
+
+        function inSand(x, y) {
+            return sandZones.some(z => isInRectZone(x, y, z));
+        }
+
+        function inRiskZone(x, y) {
+            return riskZones.some(z => isInRectZone(x, y, z));
+        }
 
         // =========================
         // Hindernisse (Hütchen)
@@ -197,7 +286,7 @@
             const innerTop = TRACK.cy - TRACK.halfHeight + TRACK_MARGIN + 80;
             const innerBottom = TRACK.cy + TRACK.halfHeight - TRACK_MARGIN - 80;
 
-            // geordnete Reihen an oberen/unteren Rändern
+            // Reihen an oberen/unteren Rändern
             for (let x = innerLeft; x <= innerRight; x += 260) {
                 addObstacle(x, innerTop + 80, 20);
                 addObstacle(x, innerBottom - 80, 20);
@@ -221,9 +310,9 @@
         }
 
         // =========================
-        // Collectibles (Punkte zum Sammeln)
+        // Collectibles
         // =========================
-        const pickups = []; // {x,y,radius}
+        const pickups = [];
         let pickupScore = 0;
         const PICKUP_COUNT = 7;
 
@@ -239,15 +328,15 @@
             let tries = 0;
             while (tries < 50) {
                 const p = randomPointInsideTrack();
-                let tooCloseToObstacles = false;
+                let tooClose = false;
                 for (const o of obstacles) {
                     const d = Math.hypot(p.x - o.x, p.y - o.y);
                     if (d < o.radius + 40) {
-                        tooCloseToObstacles = true;
+                        tooClose = true;
                         break;
                     }
                 }
-                if (!tooCloseToObstacles) {
+                if (!tooClose) {
                     pickup.x = p.x;
                     pickup.y = p.y;
                     return;
@@ -269,12 +358,83 @@
         }
 
         // =========================
+        // Car-Setups / Level / XP
+        // =========================
+        const carPresets = [
+            {
+                name: "Street",
+                colorMain: "#c00000",
+                colorAccent: "#8c0000",
+                maxSpeed: 220,
+                acceleration: 290,
+                brake: 180,
+                grip: 7,
+                handbrakeGrip: 2.2,
+                friction: 3.0
+            },
+            {
+                name: "Grip Spec",
+                colorMain: "#00a3ff",
+                colorAccent: "#0064b0",
+                maxSpeed: 210,
+                acceleration: 270,
+                brake: 220,
+                grip: 9,
+                handbrakeGrip: 2.8,
+                friction: 3.3
+            },
+            {
+                name: "Drift King",
+                colorMain: "#ff9a00",
+                colorAccent: "#c96a00",
+                maxSpeed: 240,
+                acceleration: 310,
+                brake: 190,
+                grip: 6,
+                handbrakeGrip: 2.0,
+                friction: 2.8
+            }
+        ];
+
+        let totalXP = 0;
+        let level = 1;
+        let currentPresetIndex = 0;
+
+        function updateCarStatsFromPreset() {
+            const preset = carPresets[currentPresetIndex];
+            car.maxSpeed = preset.maxSpeed;
+            car.acceleration = preset.acceleration;
+            car.brake = preset.brake;
+            car.grip = preset.grip;
+            car.handbrakeGrip = preset.handbrakeGrip;
+            car.friction = preset.friction;
+            carSetupText.textContent = preset.name;
+        }
+
+        function updateLevelAndPreset() {
+            const XP_PER_LEVEL = 5000;
+            const newLevel = 1 + Math.floor(totalXP / XP_PER_LEVEL);
+            if (newLevel !== level) {
+                level = newLevel;
+            }
+            levelText.textContent = level.toString();
+            xpText.textContent = Math.floor(totalXP).toString();
+
+            // Freischalten: alle 2 Level ein besseres Setup bis max
+            let unlocked = Math.min(Math.floor((level - 1) / 2), carPresets.length - 1);
+            if (unlocked !== currentPresetIndex) {
+                currentPresetIndex = unlocked;
+                updateCarStatsFromPreset();
+            }
+        }
+
+        // =========================
         // Car-Physik
         // =========================
         const car = {
             x: 0,
             y: 0,
-            angle: 0,          // 0 = nach oben (y-)
+            angle: 0,          // 0 = nach oben
             vx: 0,
             vy: 0,
             width: 28,
@@ -285,7 +445,7 @@
             friction: 3.0,
             grip: 7,
             handbrakeGrip: 2.2,
-            steering: 220      // Grad/Sek bei Voll-Lenken
+            steering: 220
         };
 
         const respawn = {
@@ -315,15 +475,164 @@
         function manualReset() {
             resetCar();
             driftZoneLabel.style.display = 'none';
+            perfectRunLabel.style.display = perfectRunActive ? 'block' : 'none';
         }
 
         resetCar();
         initObstacles();
         initPickups();
+        updateCarStatsFromPreset();
+        updateLevelAndPreset();
 
-        // Skidmarks: jetzt pro Rad, mit Winkel
-        const skidmarks = []; // {x,y,angle,alpha,life}
+        // =========================
+        // Drift Combo-System
+        // =========================
+        let comboMultiplier = 1;
+        let comboTimer = 0;
+        const COMBO_DRIFT_THRESHOLD = 0.35;
+        const COMBO_DECAY_TIME = 0.7;
+        let bestCombo = 1;
 
+        function updateCombo(driftStrength, speed, dt) {
+            if (driftStrength > COMBO_DRIFT_THRESHOLD && speed > 10) {
+                comboTimer = COMBO_DECAY_TIME;
+                comboMultiplier += driftStrength * dt * 1.7;
+                if (comboMultiplier < 1) comboMultiplier = 1;
+                if (comboMultiplier > 8) comboMultiplier = 8;
+            } else {
+                comboTimer -= dt;
+                if (comboTimer <= 0) {
+                    comboMultiplier = 1;
+                    comboTimer = 0;
+                }
+            }
+            if (comboMultiplier > bestCombo) bestCombo = comboMultiplier;
+            comboText.textContent = comboMultiplier.toFixed(1);
+        }
+
+        // =========================
+        // Challenges / Modi
+        // =========================
+        const challenges = [
+            {
+                id: 0,
+                name: "Freies Fahren",
+                type: "free",
+                goalText: "Mach was du willst",
+                timeLimit: 0
+            },
+            {
+                id: 1,
+                name: "Pickup Rush",
+                type: "pickup",
+                requiredPickups: 15,
+                goalText: "Sammle 15 Collects",
+                timeLimit: 60
+            },
+            {
+                id: 2,
+                name: "Drift Score Attack",
+                type: "drift",
+                requiredScore: 10000,
+                goalText: "Erreiche 10.000 Drift-Punkte",
+                timeLimit: 90
+            },
+            {
+                id: 3,
+                name: "Perfect Run",
+                type: "perfect",
+                requiredPickups: 10,
+                goalText: "10 Collects ohne Hütchen-Hit",
+                timeLimit: 75
+            }
+        ];
+
+        let currentChallenge = challenges[0];
+        let challengeTime = 0;
+        let challengeRunning = false;
+        let challengeResult = "–";
+        let challengePickupProgress = 0;
+        let challengeStartDriftScore = 0;
+        let perfectRunActive = false;
+        let perfectRunFailed = false;
+
+        function setChallenge(index) {
+            currentChallenge = challenges[index] || challenges[0];
+            challengeNameEl.textContent = currentChallenge.name;
+            challengeGoalEl.textContent = currentChallenge.goalText;
+            challengeTime = 0;
+            challengeRunning = currentChallenge.type !== "free";
+            challengeResult = challengeRunning ? "Läuft..." : "–";
+            challengeStatusEl.textContent = "Status: " + challengeResult;
+
+            challengePickupProgress = 0;
+            challengeStartDriftScore = driftScore;
+            perfectRunFailed = false;
+            perfectRunActive = currentChallenge.type === "perfect";
+            perfectRunLabel.style.display = perfectRunActive ? "block" : "none";
+        }
+
+        setChallenge(0);
+
+        function updateChallenge(dt) {
+            if (!challengeRunning) {
+                challengeTimeEl.textContent = "00.0";
+                return;
+            }
+
+            challengeTime += dt;
+            challengeTimeEl.textContent = challengeTime.toFixed(1);
+
+            if (currentChallenge.timeLimit > 0 && challengeTime > currentChallenge.timeLimit && challengeResult === "Läuft...") {
+                challengeRunning = false;
+                challengeResult = "❌ Zeit abgelaufen";
+                challengeStatusEl.textContent = "Status: " + challengeResult;
+                return;
+            }
+
+            if (currentChallenge.type === "pickup") {
+                if (challengePickupProgress >= currentChallenge.requiredPickups && challengeResult === "Läuft...") {
+                    challengeRunning = false;
+                    challengeResult = "✅ Geschafft!";
+                    challengeStatusEl.textContent = "Status: " + challengeResult;
+                    totalXP += 1500;
+                    updateLevelAndPreset();
+                }
+            }
+
+            if (currentChallenge.type === "drift") {
+                const gained = driftScore - challengeStartDriftScore;
+                if (gained >= currentChallenge.requiredScore && challengeResult === "Läuft...") {
+                    challengeRunning = false;
+                    challengeResult = "✅ Drift Ziel erreicht!";
+                    challengeStatusEl.textContent = "Status: " + challengeResult;
+                    totalXP += 2000;
+                    updateLevelAndPreset();
+                }
+            }
+
+            if (currentChallenge.type === "perfect") {
+                if (perfectRunFailed && challengeResult === "Läuft...") {
+                    challengeRunning = false;
+                    challengeResult = "❌ Hütchen getroffen";
+                    challengeStatusEl.textContent = "Status: " + challengeResult;
+                    return;
+                }
+                if (!perfectRunFailed &&
+                    challengePickupProgress >= currentChallenge.requiredPickups &&
+                    challengeResult === "Läuft...") {
+                    challengeRunning = false;
+                    challengeResult = "✅ Perfekter Run!";
+                    challengeStatusEl.textContent = "Status: " + challengeResult;
+                    totalXP += 2500;
+                    updateLevelAndPreset();
+                }
+            }
+        }
+
+        // =========================
+        // Respawn
+        // =========================
         function triggerAutoRespawn() {
             respawn.active = true;
             respawn.timer = 1.2;
@@ -332,6 +641,7 @@
             setCarToSpawn();
             offText.style.display = 'block';
             driftZoneLabel.style.display = 'none';
+            perfectRunLabel.style.display = perfectRunActive ? 'block' : 'none';
         }
 
         function updateRespawn(dt) {
@@ -351,6 +661,25 @@
             }
         }
 
+        // =========================
+        // Skidmarks (4 Räder)
+        // =========================
+        const skidmarks = []; // {x,y,angle,alpha,life}
+
+        function updateSkidmarks(dt) {
+            for (let i = skidmarks.length - 1; i >= 0; i--) {
+                skidmarks[i].life -= dt;
+                if (skidmarks[i].life <= 0) {
+                    skidmarks.splice(i, 1);
+                }
+            }
+        }
+
+        // =========================
+        // Car-Update
+        // =========================
+        let driftScore = 0;
+
         function updateCar(dt) {
             if (respawn.active) {
                 car.vx = 0;
@@ -369,6 +698,14 @@
             // Lokale Geschwindigkeitskomponenten
             const forwardSpeed = car.vx * fx + car.vy * fy;
             const sideSpeed = car.vx * sx + car.vy * sy;
+
+            // Grip, modifiziert durch Zonen
+            let baseGrip = keys.space ? car.handbrakeGrip : car.grip;
+            if (inOil(car.x, car.y)) {
+                baseGrip *= 0.25;  // sehr rutschig
+            } else if (inSand(car.x, car.y)) {
+                baseGrip *= 0.7;   // etwas rutschiger
+            }
 
             // Beschleunigen/Bremsen
             let accel = 0;
@@ -396,20 +733,23 @@
             if (newForward > maxFwd) newForward = maxFwd;
             if (newForward < maxBack) newForward = maxBack;
 
-            const grip = keys.space ? car.handbrakeGrip : car.grip;
-            const newSide = sideSpeed * Math.exp(-grip * dt);
+            const newSide = sideSpeed * Math.exp(-baseGrip * dt);
 
             // zurück in Welt-Geschwindigkeit
             let vx = fx * newForward + sx * newSide;
             let vy = fy * newForward + sy * newSide;
 
-            const speed = Math.hypot(vx, vy);
+            let speed = Math.hypot(vx, vy);
             if (speed > 0) {
-                const frictionForce = car.friction * dt;
+                let frictionForce = car.friction * dt;
+                if (inSand(car.x, car.y)) {
+                    frictionForce *= 1.4;  // langsamer in Sand
+                }
                 const newSpeed = Math.max(speed - frictionForce, 0);
                 const scale = newSpeed / speed;
                 vx *= scale;
                 vy *= scale;
+                speed = newSpeed;
             }
 
             car.vx = vx;
@@ -427,14 +767,14 @@
             car.x += car.vx * dt;
             car.y += car.vy * dt;
 
-            // Weltbegrenzung (Fallback)
+            // Weltbegrenzung
             const limit = 2000 + WORLD_MARGIN;
             if (car.x < -limit) car.x = -limit;
             if (car.x > limit) car.x = limit;
             if (car.y < -limit) car.y = -limit;
             if (car.y > limit) car.y = limit;
 
-            // Kollision mit Hütchen (Bounce)
+            // Kollision mit Hütchen
             const carRadius = car.length * 0.35;
             for (const o of obstacles) {
                 const dx = car.x - o.x;
@@ -454,24 +794,40 @@
                     car.vy = (car.vy - 2 * dot * ny) * 0.7;
 
                     car.angle += (Math.random() - 0.5) * 0.15;
+
+                    // Perfect-Run fail
+                    if (perfectRunActive && !perfectRunFailed && challengeRunning && currentChallenge.type === "perfect") {
+                        perfectRunFailed = true;
+                    }
                 }
             }
 
-            // Collectibles einsammeln
+            // Collectibles
             for (const p of pickups) {
                 const dx = car.x - p.x;
                 const dy = car.y - p.y;
                 const dist = Math.hypot(dx, dy);
-                const pickupRadius = p.radius + 20; // etwas Toleranz
+                const pickupRadius = p.radius + 20;
                 if (dist < pickupRadius) {
-                    pickupScore++;
-                    pickupScoreText.textContent = pickupScore.toString();
+                    let basePoints = 10;
+                    let gain = basePoints * comboMultiplier;
+                    pickupScore += gain;
+                    pickupScoreText.textContent = Math.round(pickupScore).toString();
+
+                    // XP & Challenge-Prog
+                    totalXP += gain;
+                    if (challengeRunning && (currentChallenge.type === "pickup" || currentChallenge.type === "perfect")) {
+                        challengePickupProgress++;
+                    }
+
                     respawnPickup(p);
                 }
             }
 
-            // Drift / Skidmarks (pro Rad)
+            // Drift / Skidmarks
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
+            updateCombo(driftStrength, speed, dt);
+
             if (driftStrength > 0.25 && speed > 5) {
                 const halfL = car.length * 0.5;
                 const halfW = car.width * 0.5;
@@ -492,44 +848,51 @@
                     });
                 }
 
-                // vier Räder
-                addWheelMark(rearOffset, -sideOffset); // hinten links
-                addWheelMark(rearOffset, sideOffset); // hinten rechts
-                addWheelMark(frontOffset, -sideOffset); // vorne links
-                addWheelMark(frontOffset, sideOffset); // vorne rechts
+                addWheelMark(rearOffset, -sideOffset);
+                addWheelMark(rearOffset, sideOffset);
+                addWheelMark(frontOffset, -sideOffset);
+                addWheelMark(frontOffset, sideOffset);
             }
 
             const kmh = Math.round(speed * 2.6);
             speedText.textContent = kmh.toString();
             driftText.textContent = Math.round(driftStrength * 100);
 
-            const inZone = isInDriftZone(car.x, car.y) && isOnTrack(car.x, car.y);
-            if (inZone && driftStrength > 0.3 && speed > 15) {
-                driftZoneLabel.style.display = 'block';
-                driftScore += driftStrength * speed * dt * 4;
-            } else {
-                driftZoneLabel.style.display = 'none';
+            // Drift-Score Berechnung
+            let driftGain = 0;
+            if (driftStrength > 0.15 && speed > 5) {
+                driftGain = driftStrength * speed * dt * 4;
+
+                if (isInDriftZone(car.x, car.y)) {
+                    driftGain *= 1.4;
+                }
+                if (inRiskZone(car.x, car.y)) {
+                    driftGain *= 2.0;
+                }
+                if (inOil(car.x, car.y)) {
+                    driftGain *= 1.3;
+                }
+
+                driftGain *= comboMultiplier;
+
+                driftScore += driftGain;
+                totalXP += driftGain * 0.6;
             }
-            driftScoreText.textContent = Math.round(driftScore);
+
+            driftScoreText.textContent = Math.round(driftScore).toString();
+            updateLevelAndPreset();
+
+            const inZone = isInDriftZone(car.x, car.y) && isOnTrack(car.x, car.y);
+            driftZoneLabel.style.display = inZone ? "block" : "none";
 
             if (!isOnTrack(car.x, car.y)) {
                 triggerAutoRespawn();
             }
         }
 
-        function updateSkidmarks(dt) {
-            for (let i = skidmarks.length - 1; i >= 0; i--) {
-                skidmarks[i].life -= dt;
-                if (skidmarks[i].life <= 0) {
-                    skidmarks.splice(i, 1);
-                }
-            }
-        }
-
         // =========================
-        // Rendering
+        // Rendering Helper
         // =========================
-
         function worldToScreen(wx, wy, camX, camY) {
             return {
                 x: canvas.width / 2 + (wx - camX),
@@ -537,6 +900,30 @@
             };
         }
 
+        function roundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        function drawWheel(cx, cy, w, h) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.fillRect(-w / 2, -h / 2, w, h);
+            ctx.restore();
+        }
+
+        // =========================
+        // Track / Zonen zeichnen
+        // =========================
         function drawTrack(camX, camY) {
             const cx = TRACK.cx;
             const cy = TRACK.cy;
@@ -558,7 +945,35 @@
             ctx.strokeStyle = "#f5f5f5";
             ctx.stroke();
 
-            // Drift Zonen
+            // Sand-Zonen
+            for (const z of sandZones) {
+                ctx.save();
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = "#a68c4f";
+                const zx = z.x - cx;
+                const zy = z.y - cy;
+                ctx.fillRect(zx, zy, z.w, z.h);
+                ctx.restore();
+            }
+
+            // Oil Spots
+            for (const z of oilSpots) {
+                ctx.save();
+                ctx.globalAlpha = 0.6;
+                const zx = z.x - cx;
+                const zy = z.y - cy;
+                const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, z.radius);
+                grad.addColorStop(0, "rgba(40,40,40,0.95)");
+                grad.addColorStop(1, "rgba(10,10,10,0.0)");
+                ctx.translate(zx, zy);
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, z.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Drift-Zonen (Bonus-Felder)
             for (const z of driftZones) {
                 ctx.save();
                 ctx.globalAlpha = 0.25;
@@ -576,11 +991,22 @@
                 ctx.restore();
             }
 
+            // Risk-Zonen (Rand)
+            for (const z of riskZones) {
+                ctx.save();
+                const zx = z.x - cx;
+                const zy = z.y - cy;
+                ctx.strokeStyle = "rgba(255,80,80,0.8)";
+                ctx.setLineDash([6, 6]);
+                ctx.lineWidth = 3;
+                ctx.strokeRect(zx, zy, z.w, z.h);
+                ctx.restore();
+            }
+
             // Curbs innen
             const innerMargin = 22;
             const curbW = w - innerMargin * 2;
             const curbH = h - innerMargin * 2;
-
             const segmentsPerSide = 22;
             ctx.lineWidth = 10;
 
@@ -676,7 +1102,6 @@
                 ctx.save();
                 ctx.translate(s.x, s.y);
 
-                // Glow
                 const rad = p.radius;
                 const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, rad + 10);
                 grad.addColorStop(0, "rgba(255,255,180,0.9)");
@@ -687,7 +1112,6 @@
                 ctx.arc(0, 0, rad + 10, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Kern (Coin)
                 ctx.fillStyle = "#ffe76a";
                 ctx.beginPath();
                 ctx.arc(0, 0, rad * 0.7, 0, Math.PI * 2);
@@ -703,10 +1127,133 @@
             }
         }
 
-        function draw(dt) {
+        // =========================
+        // Minimap
+        // =========================
+        function drawMinimap() {
+            const miniSize = 200;
+            const padding = 16;
+            const x0 = canvas.width - miniSize - padding;
+            const y0 = padding;
+
+            const wWorld = MAP_BOUNDS.maxX - MAP_BOUNDS.minX;
+            const hWorld = MAP_BOUNDS.maxY - MAP_BOUNDS.minY;
+
+            ctx.save();
+            ctx.translate(x0, y0);
+
+            ctx.fillStyle = "rgba(0,0,0,0.75)";
+            ctx.fillRect(0, 0, miniSize, miniSize);
+
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, miniSize, miniSize);
+
+            function worldToMini(wx, wy) {
+                const dx = (wx - MAP_BOUNDS.minX) / wWorld;
+                const dy = (wy - MAP_BOUNDS.minY) / hWorld;
+                return {
+                    x: dx * miniSize,
+                    y: dy * miniSize
+                };
+            }
+
+            const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
+            const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
+
+            ctx.fillStyle = "#2b2f38";
+            ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+
+            // Drift Zonen
+            for (const z of driftZones) {
+                const a = worldToMini(z.x, z.y);
+                const b = worldToMini(z.x + z.w, z.y + z.h);
+                ctx.fillStyle = "rgba(140,120,255,0.4)";
+                ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+                ctx.strokeStyle = "rgba(200,190,255,0.9)";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+            }
+
+            // Oil
+            for (const z of oilSpots) {
+                const mp = worldToMini(z.x, z.y);
+                ctx.fillStyle = "#444";
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Sand
+            for (const z of sandZones) {
+                const a = worldToMini(z.x, z.y);
+                const b = worldToMini(z.x + z.w, z.y + z.h);
+                ctx.fillStyle = "rgba(180,150,80,0.5)";
+                ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+            }
+
+            // Hindernisse
+            for (const o of obstacles) {
+                const mp = worldToMini(o.x, o.y);
+                ctx.fillStyle = "#ff9d3b";
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Pickups
+            for (const p of pickups) {
+                const mp = worldToMini(p.x, p.y);
+                ctx.fillStyle = "#ffe76a";
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Auto
+            const carMini = worldToMini(car.x, car.y);
+            ctx.save();
+            ctx.translate(carMini.x, carMini.y);
+            ctx.rotate(car.angle);
+            ctx.fillStyle = "#ff4444";
+            ctx.beginPath();
+            ctx.moveTo(0, -6);
+            ctx.lineTo(4, 4);
+            ctx.lineTo(-4, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "10px Arial";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText("MINIMAP", 6, 4);
+
+            ctx.restore();
+        }
+
+        // =========================
+        // Game Loop
+        // =========================
+        let last = performance.now();
+        function loop(now) {
+            const dt = (now - last) / 1000;
+            last = now;
+
+            updateRespawn(dt);
+            updateCar(dt);
+            updateSkidmarks(dt);
+            updateChallenge(dt);
+
             const camX = car.x;
             const camY = car.y;
 
+            // Hintergrund
             ctx.fillStyle = "#133018";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -732,7 +1279,7 @@
             drawObstacles(camX, camY);
             drawPickups(camX, camY);
 
-            // Skidmarks (dünne Linien pro Rad)
+            // Skidmarks (dünne Reifenspuren)
             for (const s of skidmarks) {
                 const pos = worldToScreen(s.x, s.y, camX, camY);
                 ctx.save();
@@ -740,7 +1287,7 @@
                 ctx.rotate(s.angle);
                 ctx.globalAlpha = Math.max(s.alpha * (s.life / 2.0), 0);
                 ctx.fillStyle = "#000";
-                ctx.fillRect(-1, -6, 2, 12); // dünne Spur längs
+                ctx.fillRect(-1, -6, 2, 12);
                 ctx.restore();
             }
 
@@ -751,6 +1298,8 @@
                 ctx.save();
                 ctx.translate(carScreen.x, carScreen.y);
                 ctx.rotate(car.angle);
+
+                const preset = carPresets[currentPresetIndex];
 
                 // Schatten
                 ctx.save();
@@ -781,11 +1330,11 @@
                 roundedRect(ctx, -car.width * 0.32, car.length * 0.05, car.width * 0.64, car.length * 0.18, 6);
                 ctx.fill();
 
-                // Motorhaube & Heck
-                ctx.fillStyle = "#c00000";
+                // Motorhaube & Heck in Preset-Farbe
+                ctx.fillStyle = preset.colorMain;
                 roundedRect(ctx, -car.width * 0.45, -car.length * 0.5, car.width * 0.9, car.length * 0.23, 8);
                 ctx.fill();
-                ctx.fillStyle = "#8c0000";
+                ctx.fillStyle = preset.colorAccent;
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
@@ -841,138 +1390,9 @@
             }
 
             drawMinimap();
-        }
 
-        // =========================
-        // Minimap oben rechts
-        // =========================
-        function drawMinimap() {
-            const miniSize = 200;
-            const padding = 16;
-            const x0 = canvas.width - miniSize - padding;
-            const y0 = padding;
-
-            const wWorld = MAP_BOUNDS.maxX - MAP_BOUNDS.minX;
-            const hWorld = MAP_BOUNDS.maxY - MAP_BOUNDS.minY;
-
-            ctx.save();
-            ctx.translate(x0, y0);
-
-            ctx.fillStyle = "rgba(0,0,0,0.75)";
-            ctx.fillRect(0, 0, miniSize, miniSize);
-
-            ctx.strokeStyle = "rgba(255,255,255,0.9)";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(0, 0, miniSize, miniSize);
-
-            function worldToMini(wx, wy) {
-                const dx = (wx - MAP_BOUNDS.minX) / wWorld;
-                const dy = (wy - MAP_BOUNDS.minY) / hWorld;
-                return {
-                    x: dx * miniSize,
-                    y: dy * miniSize
-                };
-            }
-
-            // Track
-            const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
-            const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
-
-            ctx.fillStyle = "#2b2f38";
-            ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
-
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
-
-            // Drift-Zonen
-            for (const z of driftZones) {
-                const a = worldToMini(z.x, z.y);
-                const b = worldToMini(z.x + z.w, z.y + z.h);
-                ctx.fillStyle = "rgba(140,120,255,0.4)";
-                ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
-                ctx.strokeStyle = "rgba(200,190,255,0.9)";
-                ctx.lineWidth = 1;
-                ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
-            }
-
-            // Hindernisse
-            for (const o of obstacles) {
-                const mp = worldToMini(o.x, o.y);
-                ctx.fillStyle = "#ff9d3b";
-                ctx.beginPath();
-                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Pickups
-            for (const p of pickups) {
-                const mp = worldToMini(p.x, p.y);
-                ctx.fillStyle = "#ffe76a";
-                ctx.beginPath();
-                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Auto-Pfeil
-            const carMini = worldToMini(car.x, car.y);
-            ctx.save();
-            ctx.translate(carMini.x, carMini.y);
-            ctx.rotate(car.angle);
-            ctx.fillStyle = "#ff4444";
-            ctx.beginPath();
-            ctx.moveTo(0, -6);
-            ctx.lineTo(4, 4);
-            ctx.lineTo(-4, 4);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "10px Arial";
-            ctx.textAlign = "left";
-            ctx.textBaseline = "top";
-            ctx.fillText("MINIMAP", 6, 4);
-
-            ctx.restore();
-        }
-
-        // =========================
-        // Helper
-        // =========================
-        function roundedRect(ctx, x, y, w, h, r) {
-            ctx.beginPath();
-            ctx.moveTo(x + r, y);
-            ctx.lineTo(x + w - r, y);
-            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-            ctx.lineTo(x + w, y + h - r);
-            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-            ctx.lineTo(x + r, y + h);
-            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-            ctx.lineTo(x, y + r);
-            ctx.quadraticCurveTo(x, y, x + r, y);
-            ctx.closePath();
-        }
-
-        function drawWheel(cx, cy, w, h) {
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.fillRect(-w / 2, -h / 2, w, h);
-            ctx.restore();
-        }
-
-        // =========================
-        // Game Loop
-        // =========================
-        let last = performance.now();
-        function loop(now) {
-            const dt = (now - last) / 1000;
-            last = now;
-
-            updateRespawn(dt);
-            updateCar(dt);
-            updateSkidmarks(dt);
-            draw(dt);
+            // Challenge-Status im HUD updaten
+            challengeStatusEl.textContent = "Status: " + (challengeRunning ? "Läuft..." : challengeResult);
 
             requestAnimationFrame(loop);
         }
