@@ -23,6 +23,7 @@
             border-radius: 8px;
             border-left: 4px solid #ff4747;
             font-size: 14px;
+            z-index: 10;
         }
 
         #hud-title {
@@ -42,6 +43,7 @@
             border-radius: 8px;
             text-align: right;
             font-size: 12px;
+            z-index: 10;
         }
 
         canvas {
@@ -106,16 +108,16 @@
         });
 
         // =========================
-        // Track: rechteckige Fläche
+        // Track: große rechteckige Fläche
         // =========================
         const TRACK = {
             cx: 0,
             cy: 0,
-            halfWidth: 800,
-            halfHeight: 500
+            halfWidth: 1400,   // größer
+            halfHeight: 900
         };
-        const TRACK_MARGIN = 40;  // „Rand“ innerhalb der Bahn
-        const WORLD_MARGIN = 300;
+        const TRACK_MARGIN = 40;  // innerer Rand
+        const WORLD_MARGIN = 600;
 
         function isOnTrack(x, y) {
             return (
@@ -124,6 +126,43 @@
                 y >= TRACK.cy - TRACK.halfHeight + TRACK_MARGIN &&
                 y <= TRACK.cy + TRACK.halfHeight - TRACK_MARGIN
             );
+        }
+
+        const MAP_BOUNDS = {
+            minX: TRACK.cx - TRACK.halfWidth,
+            maxX: TRACK.cx + TRACK.halfWidth,
+            minY: TRACK.cy - TRACK.halfHeight,
+            maxY: TRACK.cy + TRACK.halfHeight
+        };
+
+        // =========================
+        // Hindernisse
+        // =========================
+        const obstacles = []; // {x,y,radius}
+
+        function addObstacle(x, y, radius = 25) {
+            obstacles.push({ x, y, radius });
+        }
+
+        function initObstacles() {
+            obstacles.length = 0;
+
+            // Ein paar Pylonen an den Geraden
+            for (let x = -1200; x <= 1200; x += 200) {
+                addObstacle(x, TRACK.cy - TRACK.halfHeight + 200, 22);
+                addObstacle(x, TRACK.cy + TRACK.halfHeight - 200, 22);
+            }
+
+            // Innen im Rechteck „Inseln“
+            addObstacle(-400, -200, 35);
+            addObstacle(350, -250, 35);
+            addObstacle(-250, 260, 35);
+            addObstacle(420, 280, 35);
+
+            // kleine Slalom-Reihe
+            for (let i = -3; i <= 3; i++) {
+                addObstacle(i * 140, 0, 18);
+            }
         }
 
         // =========================
@@ -157,7 +196,7 @@
             // Start unten mittig im Rechteck, Richtung nach oben
             car.x = TRACK.cx;
             car.y = TRACK.cy + TRACK.halfHeight - 120;
-            car.angle = -Math.PI / 2; // nach oben
+            car.angle = -Math.PI / 2;
             car.vx = 0;
             car.vy = 0;
         }
@@ -176,6 +215,7 @@
         }
 
         resetCar();
+        initObstacles();
 
         const skidmarks = [];
 
@@ -257,11 +297,37 @@
             car.x += car.vx * dt;
             car.y += car.vy * dt;
 
-            const limit = 1000 + WORLD_MARGIN;
+            const limit = 2000 + WORLD_MARGIN;
             if (car.x < -limit) car.x = -limit;
             if (car.x > limit) car.x = limit;
             if (car.y < -limit) car.y = -limit;
             if (car.y > limit) car.y = limit;
+
+            // Kollision mit Hindernissen
+            const carRadius = car.length * 0.35;
+            for (const o of obstacles) {
+                const dx = car.x - o.x;
+                const dy = car.y - o.y;
+                const dist = Math.hypot(dx, dy);
+                const minDist = carRadius + o.radius;
+                if (dist < minDist && dist > 0.0001) {
+                    const overlap = minDist - dist;
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    // Auto aus dem Hindernis herausschieben
+                    car.x += nx * overlap;
+                    car.y += ny * overlap;
+
+                    // Geschwindigkeit etwas zurückprallen lassen
+                    const dot = car.vx * nx + car.vy * ny;
+                    car.vx -= 1.4 * dot * nx;
+                    car.vy -= 1.4 * dot * ny;
+
+                    car.vx *= 0.4;
+                    car.vy *= 0.4;
+                }
+            }
 
             // Drift / Skidmarks
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
@@ -332,7 +398,7 @@
             const curbW = w - innerMargin * 2;
             const curbH = h - innerMargin * 2;
 
-            const segmentsPerSide = 18;
+            const segmentsPerSide = 22;
             ctx.lineWidth = 10;
 
             function drawCurbSide(x1, y1, x2, y2, invert) {
@@ -358,26 +424,44 @@
             drawCurbSide(curbW / 2, curbH / 2, -curbW / 2, curbH / 2, false); // unten
             drawCurbSide(-curbW / 2, curbH / 2, -curbW / 2, -curbH / 2, true);  // links
 
-            // Mittellinien (zwei Fahrspuren angedeutet)
+            // Mittellinien (zwei Kreuz-Fahrspuren)
             ctx.strokeStyle = "rgba(255,255,255,0.35)";
             ctx.lineWidth = 3;
             ctx.setLineDash([16, 18]);
 
-            // vertikale Mittellinie
-            ctx.beginPath();
+            ctx.beginPath(); // vertikal
             ctx.moveTo(0, -h / 2 + 40);
             ctx.lineTo(0, h / 2 - 40);
             ctx.stroke();
 
-            // horizontale Mittellinie
-            ctx.beginPath();
+            ctx.beginPath(); // horizontal
             ctx.moveTo(-w / 2 + 40, 0);
             ctx.lineTo(w / 2 - 40, 0);
             ctx.stroke();
 
             ctx.setLineDash([]);
-
             ctx.restore();
+        }
+
+        function drawObstacles(camX, camY) {
+            for (const o of obstacles) {
+                const p = worldToScreen(o.x, o.y, camX, camY);
+                ctx.save();
+                ctx.translate(p.x, p.y);
+
+                // kleine „Pylonen“
+                const gradient = ctx.createRadialGradient(0, 0, 4, 0, 0, o.radius);
+                gradient.addColorStop(0, "#ffb84d");
+                gradient.addColorStop(0.5, "#ff7a00");
+                gradient.addColorStop(1, "#5a2400");
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, o.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
         }
 
         function draw(dt) {
@@ -391,9 +475,9 @@
             // leichte Struktur
             ctx.save();
             ctx.globalAlpha = 0.18;
-            const sz = 200;
-            for (let x = -2000; x <= 2000; x += sz) {
-                for (let y = -2000; y <= 2000; y += sz) {
+            const sz = 240;
+            for (let x = -3000; x <= 3000; x += sz) {
+                for (let y = -3000; y <= 3000; y += sz) {
                     const screenPos = worldToScreen(x, y, camX, camY);
                     if (
                         screenPos.x + sz < 0 || screenPos.x - sz > canvas.width ||
@@ -407,6 +491,7 @@
             ctx.restore();
 
             drawTrack(camX, camY);
+            drawObstacles(camX, camY);
 
             // Skidmarks
             for (const s of skidmarks) {
@@ -457,7 +542,7 @@
                 roundedRect(ctx, -car.width * 0.32, car.length * 0.05, car.width * 0.64, car.length * 0.18, 6);
                 ctx.fill();
 
-                // Motorhaube (oben) & Heck (unten)
+                // Motorhaube & Heck
                 ctx.fillStyle = "#c00000";
                 roundedRect(ctx, -car.width * 0.45, -car.length * 0.5, car.width * 0.9, car.length * 0.23, 8);
                 ctx.fill();
@@ -465,7 +550,7 @@
                 roundedRect(ctx, -car.width * 0.45, car.length * 0.27, car.width * 0.9, car.length * 0.2, 8);
                 ctx.fill();
 
-                // Scheinwerfer (kleine Balken)
+                // Scheinwerfer
                 ctx.fillStyle = "#ffe9b0";
                 ctx.fillRect(-car.width * 0.4, -car.length * 0.5 - 1, car.width * 0.3, 4);
                 ctx.fillRect(car.width * 0.1, -car.length * 0.5 - 1, car.width * 0.3, 4);
@@ -482,7 +567,7 @@
                 drawWheel(-car.width / 2 + 6, car.length / 2 - 18, 8, 4);
                 drawWheel(car.width / 2 - 6, car.length / 2 - 18, 8, 4);
 
-                // Lichtkegel vor den Scheinwerfern
+                // Lichtkegel
                 ctx.save();
                 ctx.globalAlpha = 0.35;
 
@@ -512,11 +597,93 @@
                 headlightCone(-car.width * 0.25);
                 headlightCone(car.width * 0.25);
 
-                ctx.restore(); // Lichtkegel
-                ctx.restore(); // Auto
+                ctx.restore();
+                ctx.restore();
             }
+
+            drawMinimap();
         }
 
+        // =========================
+        // Minimap oben rechts
+        // =========================
+        function drawMinimap() {
+            const miniSize = 200;
+            const padding = 16;
+            const x0 = canvas.width - miniSize - padding;
+            const y0 = padding;
+
+            const wWorld = MAP_BOUNDS.maxX - MAP_BOUNDS.minX;
+            const hWorld = MAP_BOUNDS.maxY - MAP_BOUNDS.minY;
+
+            ctx.save();
+            ctx.translate(x0, y0);
+
+            // Rahmen-Hintergrund
+            ctx.fillStyle = "rgba(0,0,0,0.75)";
+            ctx.fillRect(0, 0, miniSize, miniSize);
+
+            // leichter Rand
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, miniSize, miniSize);
+
+            function worldToMini(wx, wy) {
+                const dx = (wx - MAP_BOUNDS.minX) / wWorld;
+                const dy = (wy - MAP_BOUNDS.minY) / hWorld;
+                return {
+                    x: dx * miniSize,
+                    y: miniSize - dy * miniSize
+                };
+            }
+
+            // Track-Rechteck
+            const p1 = worldToMini(TRACK.cx - TRACK.halfWidth, TRACK.cy - TRACK.halfHeight);
+            const p2 = worldToMini(TRACK.cx + TRACK.halfWidth, TRACK.cy + TRACK.halfHeight);
+
+            ctx.fillStyle = "#2b2f38";
+            ctx.fillRect(p1.x, p2.y, p2.x - p1.x, p1.y - p2.y);
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(p1.x, p2.y, p2.x - p1.x, p1.y - p2.y);
+
+            // Hindernisse
+            for (const o of obstacles) {
+                const mp = worldToMini(o.x, o.y);
+                ctx.fillStyle = "#ff9d3b";
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Auto als kleiner Pfeil
+            const carMini = worldToMini(car.x, car.y);
+            ctx.save();
+            ctx.translate(carMini.x, carMini.y);
+            ctx.rotate(car.angle + Math.PI / 2);
+            ctx.fillStyle = "#ff4444";
+            ctx.beginPath();
+            ctx.moveTo(0, -6);
+            ctx.lineTo(4, 4);
+            ctx.lineTo(-4, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            // Label
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "10px Arial";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText("MINIMAP", 6, 4);
+
+            ctx.restore();
+        }
+
+        // =========================
+        // Helper
+        // =========================
         function roundedRect(ctx, x, y, w, h, r) {
             ctx.beginPath();
             ctx.moveTo(x + r, y);
@@ -541,7 +708,6 @@
         // =========================
         // Game Loop
         // =========================
-
         let last = performance.now();
         function loop(now) {
             const dt = (now - last) / 1000;
