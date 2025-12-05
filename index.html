@@ -191,7 +191,7 @@
             maxSpeed: 220,
             acceleration: 290,
             brake: 180,
-            friction: 2.0,
+            friction: 3.5,   // vorher 2.0
             grip: 7,
             handbrakeGrip: 2.2,
             steering: 220      // Grad pro Sek bei Voll-Lenken
@@ -278,10 +278,27 @@
 
             // Beschleunigen/Bremsen
             let accel = 0;
-            if (keys.w) accel += car.acceleration;
-            if (keys.s) accel -= car.brake;
+            if (keys.w) {
+                // Gas geben
+                accel += car.acceleration;
+            } else if (keys.s) {
+                // aktiv bremsen
+                accel -= car.brake;
+            }
 
+            // Grundupdate
             let newForward = forwardSpeed + accel * dt;
+
+            // Zusätzliche Motorbremse, wenn weder Gas noch Bremse gedrückt werden
+            if (!keys.w && !keys.s) {
+                const engineBrake = car.acceleration * 0.8 * dt;  // Stärke der Motorbremse
+                if (newForward > 0) {
+                    newForward = Math.max(0, newForward - engineBrake);
+                } else if (newForward < 0) {
+                    newForward = Math.min(0, newForward + engineBrake);
+                }
+            }
+
 
             const maxFwd = car.maxSpeed;
             const maxBack = -car.maxSpeed * 0.5;
@@ -337,24 +354,28 @@
                 const dy = car.y - o.y;
                 const dist = Math.hypot(dx, dy);
                 const minDist = carRadius + o.radius;
+
                 if (dist < minDist && dist > 0.0001) {
                     const overlap = minDist - dist;
                     const nx = dx / dist;
                     const ny = dy / dist;
 
-                    // leicht aus dem Hütchen herausschieben
-                    car.x += nx * overlap * 0.6;
-                    car.y += ny * overlap * 0.6;
+                    // kräftiger aus dem Hütchen rauspushen
+                    car.x += nx * overlap * 1.0;
+                    car.y += ny * overlap * 1.0;
 
-                    // Velocity spiegeln & dämpfen (Bounce)
+                    // Bounce: Geschwindigkeit an der Normalen stärker reflektieren
                     const dot = car.vx * nx + car.vy * ny;
-                    car.vx -= 1.0 * dot * nx;
-                    car.vy -= 1.0 * dot * ny;
 
-                    car.vx *= 0.65;
-                    car.vy *= 0.65;
+                    // 2x reflektieren = starker Abprall von der Oberfläche
+                    car.vx = (car.vx - 2 * dot * nx) * 0.7;
+                    car.vy = (car.vy - 2 * dot * ny) * 0.7;
+
+                    // minimalen zufälligen Dreher geben, damit es „arcadiger“ wirkt
+                    car.angle += (Math.random() - 0.5) * 0.15;
                 }
             }
+
 
             // Drift / Skidmarks
             const driftStrength = Math.min(Math.abs(sideSpeed) / 20, 1);
